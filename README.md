@@ -30,3 +30,4 @@ Crear las siguientes variables de entorno en el servidor, con los valores corres
 
    Una vez desplegado puede consumir el servicio realizando una petición POST, como la del siguiente ejemplo:  
    http://127.0.0.1:8088/bills/serv/bill con el body:  {"parametros": {"secuencia": "", "vigencia": "", "identificacion": "" } }
+
