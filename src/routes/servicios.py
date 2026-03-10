@@ -26,6 +26,10 @@ def verify_token_middleware():
     token = request.headers['Authorization'].split(" ")[1]
     return validate_token(token,output=False)
 '''
+@servicio.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "message": "Service is healthy"}), 200
+
 @servicio.route("/serv/bill", methods=["POST"])
 def bill_service():
     data = request.get_json()
