@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from waitress import serve
 
 #from routes.auth import routes_auth
+from routes.health import routes_health
 from routes.servicios import servicio
 
 # Carga .env solo en local (si existe). No rompe en prod.
@@ -36,13 +37,13 @@ logging.basicConfig(
 @app.before_request
 def log_request_info():
     # Evita ruido en health checks
-    if request.path == "/bills/health":
+    if request.path == "/health":
         return
     logging.info("%s request to %s from %s", request.method, request.path, request.remote_addr)
 
-print("servicio =", servicio, "type =", type(servicio))
-
+#print("servicio =", servicio, "type =", type(servicio))
 #app.register_blueprint(routes_auth, url_prefix="/bills")
+app.register_blueprint(routes_health, url_prefix="")
 app.register_blueprint(servicio, url_prefix="/bills")
 
 def run():
