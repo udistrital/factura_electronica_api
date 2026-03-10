@@ -1,0 +1,8 @@
+
+# dependencies
+/api_env
+/src/__pycache__
+/src/Connect/__pycache__
+/src/Controllers/__pycache__
+/src/routers/__pycache__
+/src/Scriptdb/__pycache__

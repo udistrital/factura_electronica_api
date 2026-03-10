@@ -1,0 +1,54 @@
+version:  "3.8"
+
+services:
+  api:
+    container_name: factura_electronica_api
+    #privileged: true
+    build: 
+      context: .
+      dockerfile: dockerfileApi
+    environment:
+      - SECRET=${SECRET}
+      - BILLPG_DB=${BILLPG_DB}
+      - BILLPG_HOST=${BILLPG_HOST}
+      - BILLPG_PASSWORD=${BILLPG_PASSWORD}
+      - BILLPG_PORT=${BILLPG_PORT}
+      - BILLPG_USER=${BILLPG_USER}
+      - BILLPG_SCHEMA=${BILLPG_SCHEMA}
+      ##on_ora
+      - BILLORA_DB=${BILLORA_DB}
+      - BILLORA_HOST=${BILLORA_HOST}
+      - BILLORA_PASSWORD=${BILLORA_PASSWORD}
+      - BILLORA_PORT=${BILLORA_PORT}
+      - BILLORA_USER=${BILLORA_USER}
+      - BILLORA_SCHEMA=${BILLORA_SCHEMA}
+      ## variables app
+      - APP_ENV=${APP_ENV}
+      - TITANIO_HOST=${TITANIO_HOST}
+      - TITANIO_NIT=${TITANIO_NIT}
+      - TITANIO_USER=${TITANIO_USER}
+      - TITANIO_PWD=${TITANIO_PWD}
+
+      ## Variables python
+      - APP_SETTINGS_MODULE=config.prod
+      - FLASK_APP=entrypoint
+      - FLASK_ENV=production
+      - FLASK_DEBUG=1
+    command: python3 main.py
+    volumes:
+      # Specify an absolute path mapping. - host directory:container directory
+      - ./public:/opt/api_facturas/public:rw
+      - ./src:/opt/api_facturas/src
+    restart: always      
+    ports:
+      - '0.0.0.0:8088:8088'
+    networks:
+      - local-network
+
+
+#volumes: # crera el volumen si no existe
+#  siveeic_data: {}
+networks:
+  local-network:
+    name: local-network
+    driver: bridge

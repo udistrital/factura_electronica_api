@@ -1,0 +1,172 @@
+{
+  "Document": {
+    "EXT": {
+      "InvoiceAuthorization": 18764070416854,
+      "StartDate": "2024-05-11",
+      "EndDate": "2025-11-08",
+      "Prefix": "SETP",
+      "From": 239915,
+      "To": 400000,
+      "IdentificationCode": "CO",
+      "ProviderID": "860028581",
+      "ProviderID_schemeID": "1",
+      "SoftwareID": "04441877-5591-4df8-88b1-b8809435513f",
+      "SoftwareSecurityCode": "",
+      "AuthorizationProviderID": "800197268",
+      "AuthorizationProviderID_schemeID": "4",
+      "QRCode": ""
+    },
+    "FAC": {
+      "UBLVersionID": "UBL 2.1",
+      "CustomizationID": "10",
+      "ProfileID": "DIAN 2.1",
+      "ProfileExecutionID": "1",
+      "ID": "SETP991561347",
+      "UUID": "",
+      "IssueDate": "2025-05-14",
+      "IssueTime": "07:00:22",
+      "InvoiceTypeCode": "01",
+      "DocumentCurrencyCode": "COP",
+      "LineCountNumeric": 2
+    },
+    "NOT": [
+      {
+        "Note": "OBSERVACIONES"
+      },
+      {
+        "Note": "VENDEDOR"
+      },
+      {
+        "Note": "CENTRO DE COSTO"
+      },
+      {
+        "Note": "Pago por Transferencia Bancaria al Banco de Occidente, Cuenta de ahorros No. 230-81461-8"
+      }
+    ],
+    "ORD": {
+      "ID": "3029950"
+    },
+    "ASP": {
+      "AdditionalAccountID": "1",
+      "PartyName": "DELCOP COLOMBIA SAS",
+      "Physical_ADD_ID": "1",
+      "Tax_RegistrationName": "DELCOP COLOMBIA SAS",
+      "Tax_CompanyID": "860028581",
+      "Tax_CompanyID_schemeID": "1",
+      "Tax_CompanyID_schemeName": "31",
+      "Tax_LevelCode": "O-13;O-15;O-23",
+      "Tax_LevelCode_listName": "48",
+      "Tax_Scheme_ID": "01",
+      "Tax_Scheme_Name": "IVA",
+      "Registration_ADD_ID": "1",
+      "CorporateRegistrationScheme_ID": "FNE",
+      "Contact_ID": "1",
+      "SellerContact_ID": "2"
+    },
+    "ACP": {
+      "CustomerAssignedAccountID": "002111",
+      "AdditionalAccountID": "1",
+      "PartyName": "ALIMENTOS DELCOP SAS",
+      "Physical_ADD_ID": "2",
+      "Tax_RegistrationName": "ALIMENTOS DELCOP SAS",
+      "Tax_CompanyID": "900327140",
+      "Tax_CompanyID_schemeName": "31",
+      "Tax_LevelCode": "O-23",
+      "Tax_LevelCode_listName": "48",
+      "Tax_Scheme_ID": "01",
+      "Tax_Scheme_Name": "IVA",
+      "Registration_ADD_ID": "2",
+      "Contact_ID": "3"
+    },
+    "PYM": [
+      {
+        "ID": "2",
+        "PaymentMeansCode": "1",
+        "PaymentDueDate": "2025-09-15",
+        "InstructionNote": "PAGO A 75 DIAS",
+        "PaymentID": "CRÉDITO"
+      }
+    ],
+    "TOT": {
+      "LineExtensionAmount": 90000.00,
+      "TaxExclusiveAmount": 0.00,
+      "TaxInclusiveAmount": 90000.00,
+      "PayableAmount": 90000.00
+    },
+    "IVL": [
+      {
+        "ID": "1",
+        "UUID": "",
+        "Note": "4030650.00",
+        "InvoicedQuantity": 1,
+        "InvoicedQuantityUnitCode": "MTR",
+        "LineExtensionAmount": 90000.00,      
+        "PriceAmount": 90000.00,
+        "BaseQuantity": 0,
+        "BaseQuantity_unitCode": "MTR",
+        "Item_Description": "TELA DE PUNTO ZANZIBAR S.O.  TEAL OSCURO",
+        "Standard_ItemID": "19260000-6",
+        "Standard_ItemID_SchemeID": "001",
+        "Standard_ItemID_SchemeName": "UNSPSC",
+        "Standard_ItemID_SchemeAgencyID": "10"
+      }
+    ],
+    "REC": [
+      {
+        "Nombre": "PRODUCTOS Y MATERIALES DE CONFECCION S.A.S.",
+        "Email": "jose.golovko@delcop.com.co",
+        "Enviar_Email": true,
+        "Incluir_Anexos": false,
+        "Incluir_PDF": true,
+        "Incluir_XML": true
+      }
+    ],
+    "ADD": [
+      {
+        "ID": "1",
+        "CityID": "11001",
+        "CityName": "BOGOTÁ, D.C.",
+        "PostalZone": "111071",
+        "CountrySubentity": "BOGOTÁ",
+        "CountrySubentityCode": "11",
+        "AddressLine": "TV 93 65 A 82",
+        "CountryName": "COLOMBIA",
+        "CountryCode": "CO"
+      },
+      {
+        "ID": "2",
+        "CityID": "05001",
+        "CityName": "MEDELLÍN",
+        "PostalZone": "050024",
+        "CountrySubentity": "ANTIOQUIA",
+        "CountrySubentityCode": "05",
+        "AddressLine": "CL 14 52 A 89",
+        "CountryName": "COLOMBIA",
+        "CountryCode": "CO"
+      }
+    ],
+    "CON": [
+      {
+        "ID": "1",
+        "Name": "Delcop Colombia",
+        "Telephone": "57 1 2916600 - 57 1 4291500",
+        "ElectronicMail": "pruebas@pruebas.com",
+        "Note": "57 1 2760523 - 57 1 4362121|www.protela.com"
+      },
+      {
+        "ID": "2",
+        "Name": "SEBASTIAN VANEGAS ALZATE",
+        "Telephone": "123456789",
+        "ElectronicMail": "pruebas@pruebas.com",
+        "Note": "200"
+      },
+      {
+        "ID": "3",
+        "Name": "CARLOS CALLE",
+        "Telephone": "57 4 3612020",
+        "ElectronicMail": "pruebas@pruebas.com",
+        "Note": "57 4 2559166"
+      }
+    ]
+  }
+}

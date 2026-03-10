@@ -1,0 +1,39 @@
+FROM python:3.10.14-bullseye
+RUN mkdir -p /opt/api_facturas
+WORKDIR /opt/api_facturas
+CMD ["source", "api-env/bin/activate"]
+RUN python3 -m pip install --upgrade pip
+# install FreeTDS and dependencies
+RUN apt-get update \
+ && apt-get install unixodbc -y \
+ && apt-get install unixodbc-dev -y \
+ && apt-get install freetds-dev -y \
+ && apt-get install freetds-bin -y \
+ && apt-get install tdsodbc -y \
+ && apt-get install --reinstall build-essential -y
+# populate "ocbcinst.ini" as this is where ODBC driver config sits
+RUN echo "[FreeTDS]\n\
+Description = FreeTDS Driver\n\
+Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so\n\
+Setup = /usr/lib/x86_64-linux-gnu/odbc/libtdsS.so" >> /etc/odbcinst.ini
+
+# Instalamos las dependencias necesarias para Oracle
+WORKDIR /opt/api_facturas/plugins/oracle
+RUN apt-get update && apt-get install -y libaio1
+COPY ./plugins/oracle /opt/api_facturas/plugins/oracle
+RUN cd /opt/api_facturas/plugins/oracle && \
+    unzip instantclient-basic-linux.x64-19.8.0.0.0dbru.zip -d .
+
+# Configuramos el cliente Oracle
+RUN cd /opt/api_facturas/plugins/oracle/instantclient_* \
+    && rm -f *jdbc* *occi* *mysql* *README *jar uidrvci genezi adrci \
+    && echo /opt/api_facturas/plugins/oracle/instantclient* > /etc/ld.so.conf.d/oracle-instantclient.conf \
+    && ldconfig
+
+ENV LD_LIBRARY_PATH=/opt/api_facturas/plugins/oracle/instantclient_19_8
+# Configuramos el directorio de trabajo y copiamos los archivos de la aplicación
+WORKDIR /opt/api_facturas/src
+COPY ./src/ /opt/api_facturas/src
+#CMD ["source", "api-env/bin/activate"]
+RUN pip3 install -r requirements.txt
+CMD ["python3", "main.py"]
