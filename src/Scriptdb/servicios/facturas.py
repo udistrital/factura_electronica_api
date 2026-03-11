@@ -38,6 +38,86 @@ def consultaRegistros(conexion,busqueda):
         cursor.close()
 
 
+def registroEnvio(conexion, datos):
+    query = """
+        INSERT INTO MNTFE.FEENVIO
+        (
+            ENV_SECUENCIA,
+            ENV_SECUENCIA_ANO,
+            ENV_DATE,
+            ENV_STATE,
+            ENV_TR_ID,
+            ENV_QR
+        )
+        VALUES
+        (
+            :secuencia,
+            :vigencia,
+            SYSDATE,
+            :estado,
+            :id_transaccion,
+            :qr_cod
+        )
+    """
+    params = {
+        "secuencia": int(datos.get("secuencia", 0)),
+        "vigencia": int(datos.get("vigencia", 0)),
+        "estado": str(datos.get("estado", "")),
+        "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
+        "qr_cod": datos.get("qr_cod")
+    }
+    #print(query)
+    #print(params)
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params
+        }
+        return response
+    except Exception as e:
+        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+def registroCUFE(conexion, datos):
+    query = """
+        UPDATE MNTFE.FEFACTURA
+        SET FAC_UUID=:cufe
+        WHERE 
+        FAC_SECUENCIA=:secuencia
+        AND FAC_SECUENCIA_ANO=:vigencia
+    """
+    params = {
+        "secuencia": int(datos.get("secuencia", 0)),
+        "vigencia": int(datos.get("vigencia", 0)),
+        "cufe": str(datos.get("cufe", ""))
+    }
+    #print(query)
+    #print(params)
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params
+        }
+        return response
+    except Exception as e:
+        print("Ocurrió un error al ejecutar la actualización:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+
 def consultaReporte(conexion,query,busqueda):
     try:
         cursor = conexion.cursor()
@@ -76,7 +156,7 @@ def executeReporte(conexion,query,busqueda):
         cursor.close()
 
 
-def consultaReporteOld(conexion,query,busqueda):
+
     try:
         with conexion.cursor() as cursor:
             searchQuery =  query
