@@ -20,12 +20,12 @@ from Controllers.general.function_jwt import validate_token
 from Controllers.servicios.facturas import synchronizeFactura
 
 servicio = Blueprint("serv", __name__)
-''' 
+ 
 @servicio.before_request
 def verify_token_middleware():
     token = request.headers['Authorization'].split(" ")[1]
     return validate_token(token,output=False)
-'''
+
 @servicio.route("/serv/bill", methods=["POST"])
 def bill_service():
     data = request.get_json()
