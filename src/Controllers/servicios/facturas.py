@@ -21,12 +21,17 @@ sys.path.insert(1, p)
 from Controllers.general.function_jwt import write_token, validate_token
 from Controllers.general.function_crypto import desencriptar_variable, keyEncode
 from Controllers.general.function_consume import consumepost_bearer, consumepost, consumepost_trans
-#from Connect.mssqlbd import conexion
 #from Connect.default_pgbd import conexion ## activar para conexión por defecto
 from Scriptdb.servicios.facturas import * 
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
 from Connect.mysqlbd import conectarMY
+
+try:
+    import cx_Oracle
+    LOB_TYPES = (cx_Oracle.LOB,)
+except Exception:
+    LOB_TYPES = tuple()
 
 '''Funcion controladora del proceso ETL'''
 def synchronizeFactura(req=""):
@@ -37,6 +42,7 @@ def synchronizeFactura(req=""):
         registros = extractData(req,conexion)
         resultado = transformData(req,registros)
         respuesta = loadData(resultado,conexion)
+        #respuesta = registros
         '''
         if api_reporte:
             respuesta = transformData(req,api_reporte)
@@ -46,7 +52,7 @@ def synchronizeFactura(req=""):
         return respuesta
     except Exception as e:
         print("Ocurrió un error en sincronizar el api de reportes: ", e)   
-        respuesta = {"Error":"El servicio no existe o el usuario no esta autorizado a consultarlo"}
+        respuesta = {"Error":"No fue posible procesar la emisión de la factura a Titanio"}
         return respuesta
     #finally:
     #    conexion.close()        
@@ -54,12 +60,15 @@ def synchronizeFactura(req=""):
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
     try:
-        #print(busqueda)
-        #datos = consultaRegistros(conexion,busqueda)
+        recibo=busqueda.get('parametros')
+        data = consultaRegistros(conexion,recibo)
+        json_text = data['data'][0]['JSON_RESULT'].read()
+        datos = json.loads(json_text)
+        '''
         ruta_json = os.path.join(p, "Controllers/servicios/formatos", "JSON INDIVIDUAL FACTURA.json")
         with open(ruta_json, "r", encoding="utf-8") as file:
             datos = json.load(file)
-        
+        '''
         return datos
     except Exception as e:
         print("Ocurrió un error al rescatar datos del api de reportes: ", e)   
@@ -84,16 +93,8 @@ def transformData(req,resultado):
                     "usuario": os.getenv("TITANIO_USER"),
                     "password": os.getenv("TITANIO_PWD")
                 }
-        acceso={}#consumepost(host_titanio,login_titanio,param_login)
-        #print(acceso)
-        #print(acceso['succes'])
+        acceso=consumepost(host_titanio,login_titanio,param_login)
         # Validar token
-        ## validacion temporal,borrar 
-        acceso['succes']= True
-        acceso['token']='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJJZCI6MiwiVXN1YXJpbyI6ImphaXJvbGgiLCJOb21icmVzIjoiSmFpcm8iLCJBcGVsbGlkb3MiOiJMYXZhZG8iLCJTdXBlcmFkbWluIjp0cnVlLCJUaXBvIjoiQWRtaW5pc3RyYWRvciIsIlZlcnNpb24iOiI3OTgxMjIxMiIsImV4cCI6MTc2ODQwMjg1NX0.7jQgWLtuFVLfhNPDiwDT_ZZWjJyRioVfsnUB57x9Zv0'
-        
-        # Validar si no se obtuvo token
-            # Validar token
         if not acceso.get("succes") or not acceso.get("token"):
             respuesta['status'] = "error"
             respuesta['code'] = 401
@@ -102,28 +103,18 @@ def transformData(req,resultado):
             return respuesta
         else:
             try:    
-
-                #print(resultado)
-                # Convertir el objeto Python a string JSON
-                json_string = json.dumps(resultado)
-                # Convertir a bytes
-                json_bytes = json_string.encode("utf-8")
-                # Codificar en Base64
-                base64_bytes = base64.b64encode(json_bytes)
-                # Convertir nuevamente a string para imprimir o usar
-                base64_resultado = base64_bytes.decode("utf-8")
-                # print(base64_resultado)
+                factura_base64 = convertir_a_base64(resultado) 
+                #print(factura_base64)
                 param_bill={
                         "token": acceso['token'],
                         "tr_tipo_id": 12839,
-                        "data": base64_resultado
+                        "data": factura_base64
                     }    
                 #print(param_bill)
                 emitir_titanio="/PDE/public/api/PDE/emitir_v2"
-                #factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
-                
+                factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
                 #factura= {"error_id": 300, "error_msg": "Su sesión ha caducado debe iniciar sesión nuevamente.", "mensaje": None, "tr_id": None, "cufe": None, "qr": None}
-                
+                '''
                 factura = { 'error_id' : 0,
                             'error_msg' : 'Se realizo con exito la operacion.',
                             'mensaje' : ' ----------------------------\r\nMensajes de Conversión a Dataset:\r\nIniciando Conversión\r\nExcepción de conversión: \r\nEtiqueta final inesperada. línea 2, posición 3.\r\n\r\n----------------------------\r\nMensajes de la validación del Dataset:\r\nAdvertencia:[FAB36] El código QR (EXT/QRCode) se corrigió\r\n----------------------------\r\nMensajes de Conversión a UBL:\r\nIniciando Conversión\r\nTerminando Conversión\r\n\r\n----------------------------\r\nMensajes de la validación del UBL:\r\nXML Válido:\r\n----------------------------\r\nMensajes de Agregar a Cola:\r\nSe agrego a la cola con exito.\r\n.',
@@ -131,13 +122,15 @@ def transformData(req,resultado):
                             'cufe': '2bec67asdasd9dasdasd46asdasdaassdasd',
                             'qr': ' NumFac: SETP90000507\r\nFe...',
                             }
-               
+                '''            
                 # se verifica si se presento error en la solicitud de emision d ela factura
                 if factura.get("error_id") > 0:
+                    mensaje = factura.get("mensaje") if factura.get("mensaje") else factura.get("error_msg")
                     respuesta['status'] = "error"
                     respuesta['code'] = 422
                     respuesta['resultado']['estado'] = "error"
-                    respuesta['resultado']['mensaje'] = "No fue posible la solicitud de emitir la factura a Titanio."
+                    respuesta['resultado']['mensaje'] = "No fue posible procesar la solicitud de emitir la factura a Titanio."
+                    respuesta['resultado']['datos']= {"mensaje_titanio":mensaje}
                     return respuesta
                 else:
                     recibo=req.get("parametros")
@@ -156,7 +149,7 @@ def transformData(req,resultado):
                     return respuesta
 
             except Exception as e:
-                print("Ocurrió un error al emitir la factura: ", e)
+                #print("Ocurrió un error al emitir la factura: ", e)
                 respuesta['status'] = "error"
                 respuesta['code'] = 422
                 respuesta['resultado']['estado'] = "error"
@@ -164,7 +157,7 @@ def transformData(req,resultado):
                 return respuesta
 
     except Exception as e:
-        print("Ocurrió un error al emitir la factura: ", e)
+        #print("Ocurrió un error al emitir la factura: ", e)
         respuesta['status'] = "error"
         respuesta['code'] = 422
         respuesta['resultado']['estado'] = "error"
@@ -204,17 +197,6 @@ def loadData(resultado,conexion=""):
         response.status_code = 400
         return response 
 
-
-def muestra(registro,campos):
-    try:
-        suma = 0  
-        for campo in campos:
-            suma=suma+registro[campo]
-        return suma
-    except Exception as e:
-        print("Ocurrió un error al sumar los datos: ", e)    
-
-
 def switchconn(motor):
     if motor.lower() == "oracle":
         dbconnect = {"host":os.getenv("BILLORA_HOST"),
@@ -236,3 +218,58 @@ def switchconn(motor):
         return conectarMY(dbconnect)
     else:
         return conexion
+
+def reemplazar_none(obj):
+    if isinstance(obj, dict):
+        return {k: reemplazar_none(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [reemplazar_none(item) for item in obj]
+    elif obj is None:
+        return ""
+    elif isinstance(obj, bool):
+        return str(obj).lower()
+    else:
+        return obj
+
+def normalizar_resultado(resultado):
+    #print("Contenido:", resultado_normalizado)
+    #print("Tipo:", type(resultado_normalizado))
+    # Caso 1: resultado completo es LOB
+    if LOB_TYPES and isinstance(resultado, LOB_TYPES):
+        resultado = resultado.read()
+    # Caso 2: resultado es diccionario
+    elif isinstance(resultado, dict):
+        nuevo_resultado = {}
+        for k, v in resultado.items():
+            if LOB_TYPES and isinstance(v, LOB_TYPES):
+                nuevo_resultado[k] = v.read()
+            else:
+                nuevo_resultado[k] = v
+        resultado = nuevo_resultado
+    # Caso 3: resultado es bytes
+    elif isinstance(resultado, bytes):
+        resultado = resultado.decode("utf-8")
+    # Caso 4: si es string, validar si contiene JSON
+    if isinstance(resultado, str):
+        texto = resultado.strip()
+        if texto.startswith("{") or texto.startswith("["):
+            try:
+                resultado = json.loads(texto)
+            except json.JSONDecodeError:
+                pass
+    # Reemplazar None por ""
+    resultado = reemplazar_none(resultado)
+    return resultado        
+
+def convertir_a_base64(resultado):
+    resultado_normalizado = normalizar_resultado(resultado)
+    #print("Contenido normalizado:", resultado_normalizado)
+    # Convertir el objeto Python a string JSON
+    json_string = json.dumps(resultado_normalizado, ensure_ascii=False)
+    # Convertir a bytes
+    json_bytes = json_string.encode("utf-8")
+    # Codificar en Base64
+    base64_bytes = base64.b64encode(json_bytes)
+    # Convertir nuevamente a string
+    base64_resultado = base64_bytes.decode("utf-8")
+    return base64_resultado
