@@ -51,7 +51,7 @@ def synchronizeFactura(req=""):
         '''    
         return respuesta
     except Exception as e:
-        print("Ocurrió un error en sincronizar el api de reportes: ", e)   
+        #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
         respuesta = {"Error":"No fue posible procesar la emisión de la factura a Titanio"}
         return respuesta
     #finally:
@@ -65,7 +65,7 @@ def extractData(busqueda="",conexion=""):
         json_text = data['data'][0]['JSON_RESULT'].read()
         datos = json.loads(json_text)
         '''
-        ruta_json = os.path.join(p, "Controllers/servicios/formatos", "JSON INDIVIDUAL FACTURA.json")
+        ruta_json = os.path.join(p, "Controllers/servicios/formatos", "JSON INDIVIDUAL FACTURA2.json")
         with open(ruta_json, "r", encoding="utf-8") as file:
             datos = json.load(file)
         '''
@@ -93,7 +93,26 @@ def transformData(req,resultado):
                     "usuario": os.getenv("TITANIO_USER"),
                     "password": os.getenv("TITANIO_PWD")
                 }
-        acceso=consumepost(host_titanio,login_titanio,param_login)
+
+        try:
+            acceso = consumepost(host_titanio, login_titanio, param_login)
+        except requests.exceptions.Timeout:
+            respuesta["status"] = "error"
+            respuesta["code"] = 504
+            respuesta["resultado"]["estado"] = "error"
+            respuesta["resultado"]["mensaje"] = "Timeout al autenticar con Titanio."
+            respuesta["resultado"]["datos"] = {"detalle": "El servicio de autenticación no respondió a tiempo."}
+            return respuesta
+        except requests.exceptions.RequestException as e:
+            respuesta["status"] = "error"
+            respuesta["code"] = 502
+            respuesta["resultado"]["estado"] = "error"
+            respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al autenticar."
+            respuesta["resultado"]["datos"] = {"detalle": str(e)}
+            return respuesta
+
+
+        #acceso=consumepost(host_titanio,login_titanio,param_login)
         # Validar token
         if not acceso.get("succes") or not acceso.get("token"):
             respuesta['status'] = "error"
@@ -147,7 +166,22 @@ def transformData(req,resultado):
                     respuesta['resultado']['mensaje']="Registro satisfactorio factura electronica Titanio."    
                     respuesta['resultado']['datos']=datos_transaccion
                     return respuesta
+            
 
+            except requests.exceptions.Timeout:
+                respuesta["status"] = "error"
+                respuesta["code"] = 504
+                respuesta["resultado"]["estado"] = "error"
+                respuesta["resultado"]["mensaje"] = "Timeout al emitir la factura en Titanio."
+                respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
+                return respuesta
+            except requests.exceptions.RequestException as e:
+                respuesta["status"] = "error"
+                respuesta["code"] = 502
+                respuesta["resultado"]["estado"] = "error"
+                respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al emitir la factura."
+                respuesta["resultado"]["datos"] = {"detalle": str(e)}
+                return respuesta
             except Exception as e:
                 #print("Ocurrió un error al emitir la factura: ", e)
                 respuesta['status'] = "error"
@@ -155,6 +189,21 @@ def transformData(req,resultado):
                 respuesta['resultado']['estado'] = "error"
                 respuesta['resultado']['mensaje'] = "No fue posible la solicitud de emitir la factura a Titanio."   
                 return respuesta
+
+    except requests.exceptions.Timeout:
+        respuesta["status"] = "error"
+        respuesta["code"] = 504
+        respuesta["resultado"]["estado"] = "error"
+        respuesta["resultado"]["mensaje"] = "Timeout al emitir la factura en Titanio."
+        respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
+        return respuesta
+    except requests.exceptions.RequestException as e:
+        respuesta["status"] = "error"
+        respuesta["code"] = 502
+        respuesta["resultado"]["estado"] = "error"
+        respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al emitir la factura."
+        respuesta["resultado"]["datos"] = {"detalle": str(e)}
+        return respuesta
 
     except Exception as e:
         #print("Ocurrió un error al emitir la factura: ", e)
@@ -226,8 +275,8 @@ def reemplazar_none(obj):
         return [reemplazar_none(item) for item in obj]
     elif obj is None:
         return ""
-    elif isinstance(obj, bool):
-        return str(obj).lower()
+    #elif isinstance(obj, bool):
+    #    return str(obj).lower()
     else:
         return obj
 
@@ -263,7 +312,7 @@ def normalizar_resultado(resultado):
 
 def convertir_a_base64(resultado):
     resultado_normalizado = normalizar_resultado(resultado)
-    #print("Contenido normalizado:", resultado_normalizado)
+    #print("Contenido normalizado:", json.dumps(resultado_normalizado, ensure_ascii=False))
     # Convertir el objeto Python a string JSON
     json_string = json.dumps(resultado_normalizado, ensure_ascii=False)
     # Convertir a bytes

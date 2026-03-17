@@ -15,21 +15,34 @@ def consultaRegistros(conexion,busqueda):
                     SELECT 
                         JSON_OBJECT(
                         'Document' VALUE JSON_OBJECT(
-                            'EXT' VALUE JSON_OBJECT(
-                                'InvoiceAuthorization' VALUE RES_INVOICE_AUTHORIZATION,
+                        	'EXT' VALUE JSON_OBJECT(
+                                'InvoiceAuthorization' VALUE TO_NUMBER(RES_INVOICE_AUTHORIZATION),
                                 'StartDate' VALUE TO_CHAR(RES_START_DATE,'YYYY-MM-DD'),
                                 'EndDate' VALUE TO_CHAR(RES_END_DATE,'YYYY-MM-DD'),
-                                'Prefix' VALUE RES_PREFIX,
+                                'Prefix' VALUE TO_CHAR(RES_PREFIX),
                                 'From' VALUE RES_FROM,
                                 'To' VALUE RES_TO,
                                 'IdentificationCode' VALUE TO_CHAR(CD_IDENTIFICATION_CODE),
                                 'ProviderID' VALUE TO_CHAR(CD_PROVIDER_ID),
                                 'ProviderID_schemeID' VALUE TO_CHAR(CD_PROVIDER_ID_SCHEME_ID),
                                 'SoftwareID' VALUE TO_CHAR(CD_SOFTWARE_ID),
-                                'SoftwareSecurityCode' VALUE TO_CHAR(CD_SOFTWARE_SECURITY_CODE),
+                                'SoftwareSecurityCode': '""' FORMAT JSON,
                                 'AuthorizationProviderID' VALUE TO_CHAR(CD_AUTHORIZATION_PROVIDER_ID),
                                 'AuthorizationProviderID_schemeID' VALUE TO_CHAR(CD_AUTHORIZATION_PROVIDER_ID_SCHEME_ID),
-                                'QRCode' VALUE TO_CHAR(CD_SOFTWARE_SECURITY_CODE) 
+                                'QRCode' : '""' FORMAT JSON
+                            ),             
+                            'FAC' VALUE JSON_OBJECT(
+                                    'UBLVersionID' VALUE EF_UBL_VERSION_ID,
+                                    'CustomizationID' VALUE TO_CODE,
+                                    'ProfileID' VALUE EF_PROFILE_ID,
+                                    'ProfileExecutionID' VALUE TO_CHAR(EF_PROFILE_EXECUTION_ID),
+                                    'ID' VALUE FAC_DOCUMENT_ID,
+                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '""') FORMAT JSON,
+                                    'IssueDate' VALUE TO_CHAR(FAC_ISSUE_DATE, 'YYYY-MM-DD'),
+                                    'IssueTime' VALUE TO_CHAR(FAC_ISSUE_DATE, 'HH24:MI:SS'),
+                                    'InvoiceTypeCode' VALUE TO_CHAR(FAC_DOCUMENT_TYPE_ID, 'FM00'),
+                                    'DocumentCurrencyCode' VALUE EF_DOCUMENT_CURRENCY_CODE,
+                                    'LineCountNumeric' VALUE FAC_LINE_COUNT_NUMERIC
                             ),
                             'NOT' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
@@ -44,74 +57,74 @@ def consultaRegistros(conexion,busqueda):
                                     JSON_OBJECT(
                                         'Note' VALUE 'Pago por Transferencia Bancaria al Banco de Occidente, Cuenta de ahorros No. 230-81461-8'
                                     )
-                                ),
-                            'FAC' VALUE JSON_OBJECT(
-                                    'UBLVersionID' VALUE EF_UBL_VERSION_ID,
-                                    'CustomizationID' VALUE TO_CODE,
-                                    'ProfileID' VALUE EF_PROFILE_ID,
-                                    'ProfileExecutionID' VALUE EF_PROFILE_EXECUTION_ID,
-                                    'ID' VALUE FAC_DOCUMENT_ID,
-                                    'UUID' VALUE FAC_UUID,
-                                    'IssueDate' VALUE TO_CHAR(FAC_ISSUE_DATE, 'YYYY-MM-DD'),
-                                    'IssueTime' VALUE TO_CHAR(FAC_ISSUE_DATE, 'HH24:MI:SS'),
-                                    'InvoiceTypeCode' VALUE FAC_DOCUMENT_TYPE_ID,
-                                    'DocumentCurrencyCode' VALUE EF_DOCUMENT_CURRENCY_CODE,
-                                    'LineCountNumeric' VALUE FAC_LINE_COUNT_NUMERIC
                             ),
+						    'ORD' VALUE JSON_OBJECT(
+						      'ID': '""' FORMAT JSON
+						    ),
                             'ASP' VALUE JSON_OBJECT(
-                                    'AdditionalAccountID' VALUE EMF_ADDITIONAL_ACCOUNT_ID,
-                                    'PartyName' VALUE EMF_PARTY_NAME,
-                                    'Physical_ADD_ID' VALUE 1,
-                                    'Tax_RegistrationName' VALUE EMF_TAX_REGISTRATION_NAME,
-                                    'Tax_CompanyID' VALUE EMF_TAX_COMPANY_ID,
-                                    'Tax_CompanyID_schemeName' VALUE EMF_TAX_COMPANY_SCHEME_NAME_ID,
-                                    'Tax_LevelCode' VALUE erf.RF_CODE,
-                                    'Tax_LevelCode_listName' VALUE EMF_TAX_LEVEL_LIST_NAME,
-                                    'Tax_Scheme_ID' VALUE EMF_TAX_SCHEME_ID,
-                                    'Tax_Scheme_Name' VALUE EMF_TAX_SCHEME_NAME,
-                                    'Registration_ADD_ID' VALUE 1,
-                                    'Contact_ID' VALUE 1
+                                    'AdditionalAccountID' VALUE TO_CHAR(EMF_ADDITIONAL_ACCOUNT_ID),
+                                    'PartyName' VALUE TO_CHAR(EMF_PARTY_NAME),
+                                    'Physical_ADD_ID' VALUE '1',
+                                    'Tax_RegistrationName' VALUE TO_CHAR(EMF_TAX_REGISTRATION_NAME),
+                                    'Tax_CompanyID' VALUE TO_CHAR(EMF_TAX_COMPANY_ID),
+      								'Tax_CompanyID_schemeID': '7',
+                                    'Tax_CompanyID_schemeName' VALUE TO_CHAR(EMF_TAX_COMPANY_SCHEME_NAME_ID),
+                                    'Tax_LevelCode' VALUE TO_CHAR(erf.RF_CODE),
+                                    'Tax_LevelCode_listName': '""' FORMAT JSON,
+                                    'Tax_Scheme_ID' VALUE TO_CHAR(EMF_TAX_SCHEME_ID, 'FM00'),
+                                    'Tax_Scheme_Name' VALUE TO_CHAR(EMF_TAX_SCHEME_NAME),
+                                    'Registration_ADD_ID' VALUE '1',
+                                    'CorporateRegistrationScheme_ID': '""' FORMAT JSON,
+                                    'Contact_ID' VALUE '1',
+                                    'SellerContact_ID': '""' FORMAT JSON
                                 ),
-                                'ACP' VALUE JSON_OBJECT(
-                                    'AdditionalAccountID' VALUE RCF_ADDITIONAL_ACCOUNT_ID,
-                                    'PartyName' VALUE RCF_PARTY_NAME,
-                                    'Physical_ADD_ID' VALUE 2,
-                                    'Tax_RegistrationName' VALUE RCF_TAX_REGISTRATION_NAME,
-                                    'Tax_CompanyID' VALUE RCF_TAX_COMPANY_ID,
-                                    'Tax_CompanyID_schemeName' VALUE RCF_TAX_COMPANY_SCHEME_NAME_ID,
-                                    'Tax_LevelCode' VALUE rrf.RF_CODE,
-                                    'Tax_LevelCode_listName' VALUE RCF_TAX_LEVEL_CODE_LIST_NAME,
-                                    'Tax_Scheme_ID' VALUE RCF_TAX_SCHEME_ID,
-                                    'Tax_Scheme_Name' VALUE RCF_TAX_SCHEME_NAME,
-                                    'Registration_ADD_ID' VALUE 2,
-                                    'Contact_ID' VALUE 2
+                            'ACP' VALUE JSON_OBJECT(
+                            		'CustomerAssignedAccountID': '""' FORMAT JSON,
+                                    'AdditionalAccountID' VALUE TO_CHAR(RCF_ADDITIONAL_ACCOUNT_ID),
+                                    'PartyName' VALUE TO_CHAR(RCF_PARTY_NAME),
+                                    'Physical_ADD_ID' VALUE '2',
+                                    'Tax_RegistrationName' VALUE TO_CHAR(RCF_TAX_REGISTRATION_NAME),
+                                    'Tax_CompanyID' VALUE TO_CHAR(RCF_TAX_COMPANY_ID),
+                                    'Tax_CompanyID_schemeName' VALUE TO_CHAR(RCF_TAX_COMPANY_SCHEME_NAME_ID),
+                                    'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), '""') FORMAT JSON,
+                                    'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), '""') FORMAT JSON,
+                                    'Tax_Scheme_ID' VALUE TO_CHAR(RCF_TAX_SCHEME_ID, 'FM00'),
+                                    'Tax_Scheme_Name' VALUE TO_CHAR(RCF_TAX_SCHEME_NAME),
+                                    'Registration_ADD_ID' VALUE '2',
+                                    'Contact_ID' VALUE '2'
                                 ),
-                                'PYM' VALUE JSON_ARRAY(
+                            'PYM' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                        'ID' VALUE PAG_FORM_ID,
-                                        'PaymentMeansCode' VALUE PAG_PAYMENT_MEANS_ID,
-                                        'PaymentDueDate' VALUE PAG_PAYMENT_DUE_DATE
+                                        'ID' VALUE TO_CHAR(PAG_FORM_ID),
+                                        'PaymentMeansCode' VALUE NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), '""') FORMAT JSON,
+                                        'PaymentDueDate' VALUE TO_CHAR(FAC_ISSUE_DATE, 'YYYY-MM-DD'),
+                                        'InstructionNote': '""' FORMAT JSON,
+                                        'PaymentID': '""' FORMAT JSON
                                     )
                                 ),
-                                'TOT' VALUE JSON_OBJECT(
+                            'TOT' VALUE JSON_OBJECT(
                                     'LineExtensionAmount' VALUE TOTF_LINE_EXTENSION_AMOUNT,
                                     'TaxExclusiveAmount' VALUE TOTF_TAX_EXCLUSIVE_AMOUNT,
                                     'TaxInclusiveAmount' VALUE TOTF_TAX_INCLUSIVE_AMOUNT,
                                     'PayableAmount' VALUE TOTF_PAYABLE_AMOUNT
                                 ),
-                                'IVL' VALUE (
+                            'IVL' VALUE (
                                     SELECT JSON_ARRAYAGG(
                                         JSON_OBJECT(
-                                            'ID' VALUE df.DF_LINE_ID,
+                                            'ID' VALUE TO_CHAR(df.DF_LINE_ID),
+                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '""') FORMAT JSON,
+                                    		'Note': '""' FORMAT JSON,
                                             'InvoicedQuantity' VALUE df.DF_QUANTITY,
-                                            'InvoicedQuantityUnitCode' VALUE dfum.UM_CODE,
+                                            'InvoicedQuantityUnitCode' VALUE TO_CHAR(dfum.UM_CODE),
                                             'LineExtensionAmount' VALUE df.DF_LINE_EXTENSION_AMOUNT,
                                             'PriceAmount' VALUE df.DF_PRICE_AMOUNT,
                                             'BaseQuantity' VALUE df.DF_BASE_QUANTITY,
-                                            'BaseQuantity_unitCode' VALUE dfum.UM_CODE,
-                                            'Item_Description' VALUE df.DF_ITEM_DESCRIPTION,
-                                            'Standard_ItemID' VALUE dfit.ITEM_CODE,
-                                            'Standard_ItemID_SchemeID' VALUE dfpro.PR_SCHEME_NAME
+                                            'BaseQuantity_unitCode' VALUE TO_CHAR(dfum.UM_CODE),
+                                            'Item_Description' VALUE TO_CHAR(df.DF_ITEM_DESCRIPTION),
+                                            'Standard_ItemID' VALUE TO_CHAR(dfit.ITEM_CODE),
+                                            'Standard_ItemID_SchemeID' VALUE TO_CHAR(dfpro.PR_ID, 'FM000'),
+                                            'Standard_ItemID_SchemeName' VALUE TO_CHAR(dfpro.PR_SCHEME_NAME),
+       	 									'Standard_ItemID_SchemeAgencyID' VALUE TO_CHAR(dfpro.PR_SCHEME_AGENCY_ID)
                                         )
                                     )
                                     FROM MNTFE.FEDETALLE df
@@ -124,10 +137,10 @@ def consultaRegistros(conexion,busqueda):
                                     WHERE df.DF_SECUENCIA = fac.FAC_SECUENCIA
                                     AND df.DF_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO
                                 ),
-                                'REC' VALUE JSON_ARRAY(
+                            'REC' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                        'Nombre' VALUE REC_NAME,
-                                        'Email' VALUE REC_EMAIL,
+                                        'Nombre' VALUE TO_CHAR(REC_NAME),
+                                        'Email' VALUE TO_CHAR(REC_EMAIL),
                                         'Enviar_Email' VALUE (
                                             CASE REC_SEND_EMAIL
                                                 WHEN 'S' THEN 'true'
@@ -158,42 +171,44 @@ def consultaRegistros(conexion,busqueda):
                                         ) FORMAT JSON
                                     )
                                 ),
-                                'ADD' VALUE JSON_ARRAY(
+                            'ADD' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                            'ID' VALUE 1,
-                                            'CityID' VALUE emf.EMF_CM_ID,
-                                            'CityName' VALUE ecm.CM_CITY_NAME,
-                                            'PostalZone' VALUE 111611,
-                                            'CountrySubentity' VALUE emfDm.DM_DEPARTMENT_NAME,
-                                            'CountrySubentityCode' VALUE emfDm.DM_ID,
-                                            'AddressLine' VALUE emf.EMF_ADDRESS_LINE,
-                                            'CountryName' VALUE emfp.PA_DESCRIPCION,
-                                            'CountryCode' VALUE emfp.PA_CODE
+                                            'ID' VALUE '1',
+                                            'CityID' VALUE TO_CHAR(emf.EMF_CM_ID),
+                                            'CityName' VALUE UPPER(ecm.CM_CITY_NAME),
+                                            'PostalZone' VALUE  TO_CHAR(emf.EMF_POSTAL_ZONE),
+                                            'CountrySubentity' VALUE UPPER(emfDm.DM_DEPARTMENT_NAME),
+                                            'CountrySubentityCode' VALUE TO_CHAR(emfDm.DM_ID),
+                                            'AddressLine' VALUE TO_CHAR(emf.EMF_ADDRESS_LINE),
+                                            'CountryName' VALUE UPPER(emfp.PA_DESCRIPCION),
+                                            'CountryCode' VALUE TO_CHAR(emfp.PA_CODE)
                                     ),
                                     JSON_OBJECT(
-                                            'ID' VALUE 2,
-                                            'CityID' VALUE ADD_CM_ID,
-                                            'CityName' VALUE addcm.CM_CITY_NAME,
-                                            'PostalZone' VALUE '',
-                                            'CountrySubentity' VALUE addDm.DM_DEPARTMENT_NAME,
-                                            'CountrySubentityCode' VALUE addDm.DM_ID,
-                                            'AddressLine' VALUE ADD_ADDRESS_LINE,
-                                            'CountryName' VALUE addp.PA_DESCRIPCION,
-                                            'CountryCode' VALUE addp.PA_CODE
+                                            'ID' VALUE '2',
+                                            'CityID' VALUE TO_CHAR(ADD_CM_ID),
+                                            'CityName' VALUE UPPER(addcm.CM_CITY_NAME),
+                                            'PostalZone' VALUE NVL(addf.ADD_POSTAL_ZONE, '""') FORMAT JSON,
+                                            'CountrySubentity' VALUE UPPER(addDm.DM_DEPARTMENT_NAME),
+                                            'CountrySubentityCode' VALUE TO_CHAR(addDm.DM_ID),
+                                            'AddressLine' VALUE TO_CHAR(ADD_ADDRESS_LINE),
+                                            'CountryName' VALUE UPPER(addp.PA_DESCRIPCION),
+                                            'CountryCode' VALUE TO_CHAR(addp.PA_CODE)
                                     )
                                 ),
-                                'CON' VALUE JSON_ARRAY(
+                            'CON' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
                                         'ID' VALUE '1',
-                                        'Name' VALUE emf.EMF_PARTY_NAME,
-                                        'Telephone' VALUE emf.EMF_TELEPHONE,
-                                        'ElectronicMail' VALUE emf.EMF_EMAIL 
+                                        'Name' VALUE TO_CHAR(emf.EMF_PARTY_NAME),
+                                        'Telephone' VALUE TO_CHAR(emf.EMF_TELEPHONE),
+                                        'ElectronicMail' VALUE TO_CHAR(emf.EMF_EMAIL),
+                                        'Note': '""' FORMAT JSON
                                     ),
                                     JSON_OBJECT(
                                         'ID' VALUE '2',
-                                        'Name' VALUE CON_NAME,
-                                        'Telephone' VALUE CON_TELEPHONE,
-                                        'ElectronicMail' VALUE CON_EMAIL
+                                        'Name' VALUE TO_CHAR(CON_NAME),
+                                        'Telephone' VALUE TO_CHAR(CON_TELEPHONE),
+                                        'ElectronicMail' VALUE TO_CHAR(CON_EMAIL),
+                                        'Note': '""' FORMAT JSON
                                     )
                                 )
                         )
@@ -241,7 +256,7 @@ def consultaRegistros(conexion,busqueda):
                 fields = [field_md[0] for field_md in cursor.description]
                 rows = cursor.fetchall()
                 registros = [dict(zip(fields, row)) for row in rows]
-
+           
             if registros:
                 return {
                     "exec": True,
@@ -382,25 +397,5 @@ def executeReporte(conexion,query,busqueda):
         print("Ocurrió un error al ejecutar la inserción: ", e)
         response= { "exec" : False}
         return response  # Indicador de fallo
-    finally:
-        cursor.close()
-
-
-
-    try:
-        with conexion.cursor() as cursor:
-            searchQuery =  query
-            print(query)
-            cursor.execute(searchQuery)
-            # fetchone trae uno por uno todas las filas ## servicios = cursor.fetchone()
-            # retorna alias y valores
-            fields = [field_md[0] for field_md in cursor.description]
-            registros = [dict(zip(fields,row)) for row in cursor.fetchall()]
-            #cursor.close()
-            #conexion.close()
-            return registros
-    except Exception as e:
-        print("Ocurrió un error al consultar los reportes: ", e)
-        return ''
     finally:
         cursor.close()
