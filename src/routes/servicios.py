@@ -17,7 +17,7 @@ import os, sys
 p = os.path.abspath('src')
 sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
-from Controllers.servicios.facturas import synchronizeFactura
+from Controllers.servicios.emitirfactura import emitBill
 
 servicio = Blueprint("serv", __name__)
 ''' 
@@ -26,9 +26,9 @@ def verify_token_middleware():
     token = request.headers['Authorization'].split(" ")[1]
     return validate_token(token,output=False)
 '''
-@servicio.route("/serv/bill", methods=["POST"])
+@servicio.route("/serv/emit", methods=["POST"])
 def bill_service():
     data = request.get_json()
-    respuesta = synchronizeFactura(data)
+    respuesta = emitBill(data)
     return respuesta
 

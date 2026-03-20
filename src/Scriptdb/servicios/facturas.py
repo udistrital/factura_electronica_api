@@ -38,7 +38,7 @@ def consultaRegistros(conexion,busqueda):
                                     'ProfileID' VALUE EF_PROFILE_ID,
                                     'ProfileExecutionID' VALUE TO_CHAR(EF_PROFILE_EXECUTION_ID),
                                     'ID' VALUE FAC_DOCUMENT_ID,
-                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '') FORMAT JSON,
+                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
                                     'IssueDate' VALUE TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
                                     'IssueTime' VALUE TO_CHAR(SYSDATE, 'HH24:MI:SS'),
                                     'InvoiceTypeCode' VALUE TO_CHAR(FAC_DOCUMENT_TYPE_ID, 'FM00'),
@@ -50,10 +50,10 @@ def consultaRegistros(conexion,busqueda):
                                         'Note' VALUE 'OBSERVACIONES'
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'VENDEDOR'
+                                        'Note' VALUE 'VENDEDOR PRINCIPAL'
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'CENTRO DE COSTO'
+                                        'Note' VALUE NVL(TO_CHAR(FAC_COST_CENTER), '')
                                     ),
                                     JSON_OBJECT(
                                         'Note' VALUE 'Pago por Transferencia Bancaria al Banco de Occidente, Cuenta de ahorros No. 230-81461-8'
@@ -87,8 +87,8 @@ def consultaRegistros(conexion,busqueda):
                                     'Tax_RegistrationName' VALUE TO_CHAR(RCF_TAX_REGISTRATION_NAME),
                                     'Tax_CompanyID' VALUE TO_CHAR(RCF_TAX_COMPANY_ID),
                                     'Tax_CompanyID_schemeName' VALUE TO_CHAR(RCF_TAX_COMPANY_SCHEME_NAME_ID),
-                                    'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), '""') FORMAT JSON,
-                                    'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), '""') FORMAT JSON,
+                                    'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), ''),
+                                    'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), ''),
                                     'Tax_Scheme_ID' VALUE TO_CHAR(RCF_TAX_SCHEME_ID, 'FM00'),
                                     'Tax_Scheme_Name' VALUE TO_CHAR(RCF_TAX_SCHEME_NAME),
                                     'Registration_ADD_ID' VALUE '2',
@@ -97,8 +97,8 @@ def consultaRegistros(conexion,busqueda):
                             'PYM' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
                                         'ID' VALUE TO_CHAR(PAG_FORM_ID),
-                                        'PaymentMeansCode' VALUE TO_CHAR(NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), '""')),
-                                        'PaymentDueDate' VALUE TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
+                                        'PaymentMeansCode' VALUE NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), ''),
+                                        'PaymentDueDate' VALUE NVL(TO_CHAR(PAG_PAYMENT_DUE_DATE,'YYYY-MM-DD'), TO_CHAR(SYSDATE, 'YYYY-MM-DD')), 
                                         'InstructionNote': '""' FORMAT JSON,
                                         'PaymentID': '""' FORMAT JSON
                                     )
@@ -113,7 +113,7 @@ def consultaRegistros(conexion,busqueda):
                                     SELECT JSON_ARRAYAGG(
                                         JSON_OBJECT(
                                             'ID' VALUE TO_CHAR(df.DF_LINE_ID),
-                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '""') FORMAT JSON,
+                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
                                     		'Note': '""' FORMAT JSON,
                                             'InvoicedQuantity' VALUE df.DF_QUANTITY,
                                             'InvoicedQuantityUnitCode' VALUE TO_CHAR(dfum.UM_CODE),
@@ -271,14 +271,14 @@ def consultaRegistros(conexion,busqueda):
                 }
 
         except Exception as e:
-            print("Ocurrió un error al ejecutar la consulta de la factura:", e)
+            #print("Ocurrió un error al ejecutar la consulta de la factura:", e)
             return {
                 "exec": False,
                 "error": str(e)
             }
 
     except Exception as e:
-        print("Ocurrió un error al consultar los APIs de reportes:", e)
+        #print("Ocurrió un error al consultar los APIs de reportes:", e)
         return {
             "exec": False,
             "error": str(e)
@@ -316,7 +316,7 @@ def consultaEnvio(conexion, datos):
         else:
             return {"exec": False, "data": [], "message": "No se encontraron registros" }
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
@@ -353,7 +353,7 @@ def registroEnvio(conexion, datos):
         "vigencia": int(datos.get("vigencia", 0)),
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
-        "error_msg":str(datos.get("error", "")),
+        "error_msg":str(datos.get("error_dian", "")),
     }
     #print(query)
     #print(params)
@@ -367,7 +367,7 @@ def registroEnvio(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
@@ -399,7 +399,7 @@ def actualizaEnvio(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
@@ -453,7 +453,7 @@ def registroCUFE(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la actualización:", e)
+        #print("Ocurrió un error al ejecutar la actualización:", e)
         response = {
             "exec": False,
             "error": str(e)
@@ -474,7 +474,7 @@ def consultaReporte(conexion,query,busqueda):
         #conexion.close()
         return registros
     except Exception as e:
-        print("Ocurrió un error al consultar los reportes: ", e)
+        #print("Ocurrió un error al consultar los reportes: ", e)
         return ''
     finally:
         cursor.close()
@@ -493,7 +493,7 @@ def executeReporte(conexion,query,busqueda):
             response= { "exec" : True, "data": registros}
             return response 
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción: ", e)
+        #print("Ocurrió un error al ejecutar la inserción: ", e)
         response= { "exec" : False}
         return response  # Indicador de fallo
     finally:
