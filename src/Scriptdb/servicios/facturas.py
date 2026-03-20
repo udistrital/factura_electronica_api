@@ -7,6 +7,7 @@ Fecha: Enero 2024
 versión: 0.0.0.1
 """
 import json
+from datetime import datetime
 
 def consultaRegistros(conexion,busqueda):
     try:
@@ -37,9 +38,9 @@ def consultaRegistros(conexion,busqueda):
                                     'ProfileID' VALUE EF_PROFILE_ID,
                                     'ProfileExecutionID' VALUE TO_CHAR(EF_PROFILE_EXECUTION_ID),
                                     'ID' VALUE FAC_DOCUMENT_ID,
-                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '""') FORMAT JSON,
-                                    'IssueDate' VALUE TO_CHAR(FAC_ISSUE_DATE, 'YYYY-MM-DD'),
-                                    'IssueTime' VALUE TO_CHAR(FAC_ISSUE_DATE, 'HH24:MI:SS'),
+                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
+                                    'IssueDate' VALUE TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
+                                    'IssueTime' VALUE TO_CHAR(SYSDATE, 'HH24:MI:SS'),
                                     'InvoiceTypeCode' VALUE TO_CHAR(FAC_DOCUMENT_TYPE_ID, 'FM00'),
                                     'DocumentCurrencyCode' VALUE EF_DOCUMENT_CURRENCY_CODE,
                                     'LineCountNumeric' VALUE FAC_LINE_COUNT_NUMERIC
@@ -49,10 +50,10 @@ def consultaRegistros(conexion,busqueda):
                                         'Note' VALUE 'OBSERVACIONES'
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'VENDEDOR'
+                                        'Note' VALUE 'VENDEDOR PRINCIPAL'
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'CENTRO DE COSTO'
+                                        'Note' VALUE NVL(TO_CHAR(FAC_COST_CENTER), '')
                                     ),
                                     JSON_OBJECT(
                                         'Note' VALUE 'Pago por Transferencia Bancaria al Banco de Occidente, Cuenta de ahorros No. 230-81461-8'
@@ -86,8 +87,8 @@ def consultaRegistros(conexion,busqueda):
                                     'Tax_RegistrationName' VALUE TO_CHAR(RCF_TAX_REGISTRATION_NAME),
                                     'Tax_CompanyID' VALUE TO_CHAR(RCF_TAX_COMPANY_ID),
                                     'Tax_CompanyID_schemeName' VALUE TO_CHAR(RCF_TAX_COMPANY_SCHEME_NAME_ID),
-                                    'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), '""') FORMAT JSON,
-                                    'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), '""') FORMAT JSON,
+                                    'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), ''),
+                                    'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), ''),
                                     'Tax_Scheme_ID' VALUE TO_CHAR(RCF_TAX_SCHEME_ID, 'FM00'),
                                     'Tax_Scheme_Name' VALUE TO_CHAR(RCF_TAX_SCHEME_NAME),
                                     'Registration_ADD_ID' VALUE '2',
@@ -96,8 +97,8 @@ def consultaRegistros(conexion,busqueda):
                             'PYM' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
                                         'ID' VALUE TO_CHAR(PAG_FORM_ID),
-                                        'PaymentMeansCode' VALUE NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), '""') FORMAT JSON,
-                                        'PaymentDueDate' VALUE TO_CHAR(FAC_ISSUE_DATE, 'YYYY-MM-DD'),
+                                        'PaymentMeansCode' VALUE NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), ''),
+                                        'PaymentDueDate' VALUE NVL(TO_CHAR(PAG_PAYMENT_DUE_DATE,'YYYY-MM-DD'), TO_CHAR(SYSDATE, 'YYYY-MM-DD')), 
                                         'InstructionNote': '""' FORMAT JSON,
                                         'PaymentID': '""' FORMAT JSON
                                     )
@@ -112,7 +113,7 @@ def consultaRegistros(conexion,busqueda):
                                     SELECT JSON_ARRAYAGG(
                                         JSON_OBJECT(
                                             'ID' VALUE TO_CHAR(df.DF_LINE_ID),
-                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), '""') FORMAT JSON,
+                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
                                     		'Note': '""' FORMAT JSON,
                                             'InvoicedQuantity' VALUE df.DF_QUANTITY,
                                             'InvoicedQuantityUnitCode' VALUE TO_CHAR(dfum.UM_CODE),
@@ -270,38 +271,81 @@ def consultaRegistros(conexion,busqueda):
                 }
 
         except Exception as e:
-            print("Ocurrió un error al ejecutar la consulta de la factura:", e)
+            #print("Ocurrió un error al ejecutar la consulta de la factura:", e)
             return {
                 "exec": False,
                 "error": str(e)
             }
 
     except Exception as e:
-        print("Ocurrió un error al consultar los APIs de reportes:", e)
+        #print("Ocurrió un error al consultar los APIs de reportes:", e)
         return {
             "exec": False,
             "error": str(e)
         }
 
+def consultaEnvio(conexion, datos):
+    query = """
+        SELECT 
+            ENV_ID,
+            ENV_SECUENCIA, 
+            ENV_SECUENCIA_ANO, 
+            ENV_DATE,
+            ENV_STATE_SEND,
+            ENV_TR_ID,
+            ENV_ERROR,
+            ENV_STATE
+        FROM MNTFE.FEENVIO
+        WHERE
+        ENV_SECUENCIA = :secuencia
+        AND ENV_SECUENCIA_ANO = :vigencia
+        AND ENV_STATE='A'
+    """
+    params = {
+        "secuencia": int(datos.get("secuencia", 0)),
+        "vigencia": int(datos.get("vigencia", 0))
+    }
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True,"data": registros }
+        else:
+            return {"exec": False, "data": [], "message": "No se encontraron registros" }
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
 def registroEnvio(conexion, datos):
     query = """
         INSERT INTO MNTFE.FEENVIO
         (
-            ENV_SECUENCIA,
-            ENV_SECUENCIA_ANO,
-            ENV_DATE,
-            ENV_STATE,
-            ENV_TR_ID,
-            ENV_QR
+            ENV_ID,
+            ENV_SECUENCIA, 
+            ENV_SECUENCIA_ANO, 
+            ENV_DATE, 
+            ENV_STATE_SEND, 
+            ENV_TR_ID,  
+            ENV_ERROR, 
+            ENV_STATE
         )
         VALUES
-        (
+        (   (SELECT NVL(MAX(ENV_ID), 0) + 1 AS NEXT_ID
+              FROM MNTFE.FEENVIO), 
             :secuencia,
             :vigencia,
             SYSDATE,
             :estado,
             :id_transaccion,
-            :qr_cod
+            :error_msg,
+            'A'
         )
     """
     params = {
@@ -309,7 +353,7 @@ def registroEnvio(conexion, datos):
         "vigencia": int(datos.get("vigencia", 0)),
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
-        "qr_cod": datos.get("qr_cod")
+        "error_msg":str(datos.get("error_dian", "")),
     }
     #print(query)
     #print(params)
@@ -323,25 +367,25 @@ def registroEnvio(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
         }
         return response
 
-def registroCUFE(conexion, datos):
+
+def actualizaEnvio(conexion, datos):
     query = """
-        UPDATE MNTFE.FEFACTURA
-        SET FAC_UUID=:cufe
-        WHERE 
-        FAC_SECUENCIA=:secuencia
-        AND FAC_SECUENCIA_ANO=:vigencia
+        UPDATE MNTFE.FEENVIO
+        SET ENV_STATE = 'I'
+        WHERE
+        ENV_SECUENCIA = :secuencia 
+        AND ENV_SECUENCIA_ANO = :vigencia 
     """
     params = {
         "secuencia": int(datos.get("secuencia", 0)),
-        "vigencia": int(datos.get("vigencia", 0)),
-        "cufe": str(datos.get("cufe", ""))
+        "vigencia": int(datos.get("vigencia", 0))
     }
     #print(query)
     #print(params)
@@ -355,12 +399,67 @@ def registroCUFE(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la actualización:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
         }
         return response
+
+
+
+def registroCUFE(conexion, datos):
+    query = """
+        UPDATE MNTFE.FEFACTURA
+        SET FAC_UUID=:cufe
+        , FAC_QR=:qr_code
+        , FAC_ISSUE_DATE=TO_DATE(:emision, 'YYYY-MM-DD HH24:MI:SS')
+        WHERE 
+        FAC_SECUENCIA=:secuencia
+        AND FAC_SECUENCIA_ANO=:vigencia
+    """
+
+    fecha_raw = datos.get("fecha_emision")
+    if fecha_raw:
+        fecha_raw = str(fecha_raw).strip()
+        if len(fecha_raw) >= 19:
+            # Caso con zona horaria o completo
+            fecha_emite = fecha_raw[:19]
+        elif len(fecha_raw) == 10:
+            # Solo fecha → completar hora
+            fecha_emite = f"{fecha_raw} 00:00:00"
+        else:
+            # Formato inesperado
+            fecha_emite = None
+    else:
+        fecha_emite = None
+
+    params = {
+        "secuencia": int(datos.get("secuencia", 0)),
+        "vigencia": int(datos.get("vigencia", 0)),
+        "cufe": str(datos.get("cufe", "")),
+        "qr_code": str(datos.get("qr_cod", "")),
+        "emision": fecha_emite
+    }
+    #print(query)
+    #print(params)
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params
+        }
+        return response
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la actualización:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
 
 
 def consultaReporte(conexion,query,busqueda):
@@ -375,7 +474,7 @@ def consultaReporte(conexion,query,busqueda):
         #conexion.close()
         return registros
     except Exception as e:
-        print("Ocurrió un error al consultar los reportes: ", e)
+        #print("Ocurrió un error al consultar los reportes: ", e)
         return ''
     finally:
         cursor.close()
@@ -394,7 +493,7 @@ def executeReporte(conexion,query,busqueda):
             response= { "exec" : True, "data": registros}
             return response 
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción: ", e)
+        #print("Ocurrió un error al ejecutar la inserción: ", e)
         response= { "exec" : False}
         return response  # Indicador de fallo
     finally:
