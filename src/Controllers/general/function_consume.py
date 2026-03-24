@@ -1,11 +1,3 @@
-"""
-Proyecto ODIN - Generador de servicios api-rest  
-Módulo: Generador Tebleros EDA como Servicio
-Basado en framework Flask
-Author: Jairo Lavado.
-Fecha: Enero 2024
-versión: 0.0.0.1
-"""
 import json
 import bcrypt
 from flask import request, jsonify, Response, send_file, abort

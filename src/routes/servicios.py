@@ -1,11 +1,3 @@
-"""
-Proyecto ODIN - Generador de servicios api-rest  
-Módulo: Generador reportes Api-rest
-Basado en framework Flask
-Author: Jairol Lavado.
-Fecha: Enero 2024
-versión: 0.0.0.1
-"""
 from flask import Blueprint, request, jsonify
 from requests import get
 import time
@@ -18,6 +10,7 @@ p = os.path.abspath('src')
 sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
 from Controllers.servicios.emitirfactura import emitBill
+from Controllers.servicios.sincronizafactura import sincronizeBill
 
 servicio = Blueprint("serv", __name__)
 ''' 
@@ -32,3 +25,8 @@ def bill_service():
     respuesta = emitBill(data)
     return respuesta
 
+@servicio.route("/serv/sinc", methods=["POST"])
+def sinc_service():
+    data = request.get_json()
+    respuesta = sincronizeBill(data)
+    return respuesta
