@@ -198,7 +198,7 @@ def transformData(req,resultado):
                     "secuencia": resultado.get("secuencia"),
                     "identificacion": resultado.get("identificacion"),
                     "estado_dian": estado_dian,
-                    "error_dian": error_dian,
+                    "error_emision": error_dian,
                     "id_transaccion": resultado.get("transaccion"),
                     "fecha_emision": fecha_emision, 
                     "cufe": cufe,
