@@ -112,166 +112,195 @@ def transformData(req,resultado):
                                 "datos": ""
                               }
                 }
-        ## loguearse a plataforma Titanio
-        host_titanio = os.getenv("TITANIO_HOST")
-        login_titanio="/PDE/public/api/PDE/authentication"
-        param_login={
-                    "NIT": os.getenv("TITANIO_NIT"),
-                    "usuario": os.getenv("TITANIO_USER"),
-                    "password": os.getenv("TITANIO_PWD")
-                }
 
-        try:
-            acceso = consumepost(host_titanio, login_titanio, param_login)
-        except requests.exceptions.Timeout:
-            respuesta["status"] = "error"
-            respuesta["code"] = 504
-            respuesta["resultado"]["estado"] = "error"
-            respuesta["resultado"]["mensaje"] = "Timeout al autenticar con Titanio."
-            respuesta["resultado"]["datos"] = {"detalle": "El servicio de autenticación no respondió a tiempo."}
-            return respuesta
-        except requests.exceptions.RequestException as e:
-            respuesta["status"] = "error"
-            respuesta["code"] = 502
-            respuesta["resultado"]["estado"] = "error"
-            respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al autenticar."
-            respuesta["resultado"]["datos"] = {"detalle": str(e)}
-            return respuesta
-
-        # Validar token
-        if not acceso.get("succes") or not acceso.get("token"):
-            respuesta['status'] = "error"
-            respuesta['code'] = 401
-            respuesta['resultado']['estado'] = "error"
-            respuesta['resultado']['mensaje'] = "No fue posible obtener el token de autenticación Titanio."
-            return respuesta
-        else:
-            try:    
-                factura_base64 = convertir_a_base64(resultado) 
-                param_bill={
-                        "token": acceso['token'],
-                        "tr_tipo_id": 12839,
-                        "data": factura_base64
-                    }    
-                #print(param_bill)
-                emitir_titanio="/PDE/public/api/PDE/emitir_v2"
-                factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
-                '''
-                factura = { 'error_id' : 0,
-                            'error_msg' : 'Se realizo con exito la operacion.',
-                            'mensaje' : ' ----------------------------\r\nMensajes de Conversión a Dataset:\r\nIniciando Conversión\r\nExcepción de conversión: \r\nEtiqueta final inesperada. línea 2, posición 3.\r\n\r\n----------------------------\r\nMensajes de la validación del Dataset:\r\nAdvertencia:[FAB36] El código QR (EXT/QRCode) se corrigió\r\n----------------------------\r\nMensajes de Conversión a UBL:\r\nIniciando Conversión\r\nTerminando Conversión\r\n\r\n----------------------------\r\nMensajes de la validación del UBL:\r\nXML Válido:\r\n----------------------------\r\nMensajes de Agregar a Cola:\r\nSe agrego a la cola con exito.\r\n.',
-                            'tr_id' : 3873108,
-                            'cufe': 'fc4a8bb60d850f198e4430f5cb0214ee25683d25b850cde840ce3795e83d959a25a5df61672c4994dd539071332f190c',
-                            'qr': ' NumFac: SETP90000507\r\nFe...',
-                            }
-                '''
-                # se verifica si se presento error en la solicitud de emision d ela factura
-                if factura.get("error_id") > 0:
-                    mensaje = factura.get("mensaje") if factura.get("mensaje") else factura.get("error_msg")
-                    respuesta['status'] = "error"
-                    respuesta['code'] = 422
-                    respuesta['resultado']['estado'] = "error"
-                    respuesta['resultado']['mensaje'] = "No fue posible procesar la solicitud de emitir la factura a Titanio."
-                    respuesta['resultado']['datos']= {"mensaje_titanio":mensaje}
-                    return respuesta
-                else:
-                    recibo = req.get("parametros", {})
-                    param_search = {
-                        "token": acceso.get('token'),
-                        "transaccion_id": factura.get("tr_id")
-                    }
-                    search_trans = "/PDE/public/api/PDE/detalle"
-                    #search_result = consumepost_trans(host_titanio, search_trans, param_search)
-                    max_intentos = 3          # número de intentos
-                    espera_segundos = 5       # tiempo entre intentos
-                    search_result = None
-                    for intento in range(max_intentos):
-                        time.sleep(espera_segundos)
-                        search_result = consumepost_trans(host_titanio, search_trans, param_search)
-                        #print(f"Intento {intento+1}:", search_result)
-                        if not isinstance(search_result, dict):
-                            continue
-                        estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
-                        if estados:
-                            break
-
-                    # Inicializar variables
-                    estado_dian = None
-                    error_dian = ""
-                    fecha_emision = ""
-                    cufe = ""
-                    qr = ""
-
-                    # Validar estructura
-                    if isinstance(search_result, dict):
-                        estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
-                        lista_estados = [x.strip() for x in estados.split(",") if x.strip()]
-                        if len(lista_estados) >= 4:
-                            estado_dian = lista_estados[3]
-                        metadata = search_result.get('detalleMetadata', [])
-                        metadata_dict = {
-                            item.get("campo"): item.get("valor")
-                            for item in metadata if isinstance(item, dict)
-                        }
-
-                        if estado_dian:
-                            if "Rechazado" in estado_dian:
-                                error_dian = (search_result.get("error") or search_result.get("mensaje") or "Documento rechazado por la DIAN" )
-                                param_del = { "token": acceso.get('token'),
-                                              "transaccion": factura.get("tr_id")
-                                            }
-                                #print(param_del)            
-                                del_trans = "/PDE/public/api/PDE/borrar"
-                                del_result = consumepost_trans(host_titanio, del_trans, param_del)
-                            elif "Validado" in estado_dian:
-                                fecha_emision = metadata_dict.get("FECHA", "")
-                                cufe = metadata_dict.get("CUFE", "")
-                                qr = metadata_dict.get("QR", "")
-                    #else:
-                    #    print("⚠️ search_result no es válido:", search_result)
-
-                    datos_transaccion = {
-                        "vigencia": recibo.get("vigencia"),
-                        "secuencia": recibo.get("secuencia"),
-                        "identificacion": recibo.get("identificacion"),
-                        "estado_dian": estado_dian,
-                        "error_dian": error_dian,
-                        "id_transaccion": factura.get("tr_id"),
-                        "fecha_emision": fecha_emision, 
-                        "cufe": cufe,
-                        "qr_cod": qr
+        if resultado :            
+            ## loguearse a plataforma Titanio
+            host_titanio = os.getenv("TITANIO_HOST")
+            login_titanio="/PDE/public/api/PDE/authentication"
+            param_login={
+                        "NIT": os.getenv("TITANIO_NIT"),
+                        "usuario": os.getenv("TITANIO_USER"),
+                        "password": os.getenv("TITANIO_PWD")
                     }
 
-                    respuesta['status'] = "success"
-                    respuesta['code'] = 200
-                    respuesta['resultado']['estado'] = "success"
-                    respuesta['resultado']['mensaje'] = (
-                        f"Solicitud de generación de factura electrónica en Titanio, con estado {estado_dian}."
-                    )
-                    respuesta['resultado']['datos'] = datos_transaccion
-                    return respuesta
-
+            try:
+                acceso = consumepost(host_titanio, login_titanio, param_login)
             except requests.exceptions.Timeout:
                 respuesta["status"] = "error"
                 respuesta["code"] = 504
                 respuesta["resultado"]["estado"] = "error"
-                respuesta["resultado"]["mensaje"] = "Timeout al emitir la factura en Titanio."
-                respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
+                respuesta["resultado"]["mensaje"] = "Timeout al autenticar con Titanio."
+                respuesta["resultado"]["datos"] = {"detalle": "El servicio de autenticación no respondió a tiempo."}
                 return respuesta
             except requests.exceptions.RequestException as e:
                 respuesta["status"] = "error"
                 respuesta["code"] = 502
                 respuesta["resultado"]["estado"] = "error"
-                respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al emitir la factura."
+                respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al autenticar."
                 respuesta["resultado"]["datos"] = {"detalle": str(e)}
                 return respuesta
-            except Exception as e:
-                #print("Ocurrió un error al emitir la factura: ", e)
+
+            # Validar token
+            if not acceso.get("succes") or not acceso.get("token"):
                 respuesta['status'] = "error"
-                respuesta['code'] = 422
+                respuesta['code'] = 401
                 respuesta['resultado']['estado'] = "error"
-                respuesta['resultado']['mensaje'] = "No fue posible la solicitud de emitir la factura a Titanio."   
+                respuesta['resultado']['mensaje'] = "No fue posible obtener el token de autenticación Titanio."
                 return respuesta
+            else:
+                try:    
+                    factura_base64 = convertir_a_base64(resultado) 
+                    param_bill={
+                            "token": acceso['token'],
+                            "tr_tipo_id": 12839,
+                            "data": factura_base64
+                        }    
+                    emitir_titanio="/PDE/public/api/PDE/emitir_v2"
+                    factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
+                    '''
+                    factura = { 'error_id' : 0,
+                                'error_msg' : 'Se realizo con exito la operacion.',
+                                'mensaje' : ' ----------------------------\r\nMensajes de Conversión a Dataset:\r\nIniciando Conversión\r\nExcepción de conversión: \r\nEtiqueta final inesperada. línea 2, posición 3.\r\n\r\n----------------------------\r\nMensajes de la validación del Dataset:\r\nAdvertencia:[FAB36] El código QR (EXT/QRCode) se corrigió\r\n----------------------------\r\nMensajes de Conversión a UBL:\r\nIniciando Conversión\r\nTerminando Conversión\r\n\r\n----------------------------\r\nMensajes de la validación del UBL:\r\nXML Válido:\r\n----------------------------\r\nMensajes de Agregar a Cola:\r\nSe agrego a la cola con exito.\r\n.',
+                                'tr_id' : 3873108,
+                                'cufe': 'fc4a8bb60d850f198e4430f5cb0214ee25683d25b850cde840ce3795e83d959a25a5df61672c4994dd539071332f190c',
+                                'qr': ' NumFac: SETP90000507\r\nFe...',
+                                }
+                    '''
+                    '''
+                    factura = {'error_id': 310, 'error_msg': '', 
+                               'mensaje': "DOC ID:[SETT11581]\r\nAdvertencia:  [FAB05b] La resolución (EXT/InvoiceAuthorization) se corrigió\r\nAdvertencia:  [FAB07b] La fecha desde (EXT/StartDate) se corrigió\r\nAdvertencia:  [FAB08b] La fecha hasta (EXT/EndDate) se corrigió\r\nAdvertencia:  [FAB11b] El Rango de numeración Desde (EXT/From) se corrigió\r\nAdvertencia:  [FAB12b] El Rango de numeración Hasta (EXT/To) se corrigió\r\nAdvertencia:  [FAB36] El código QR (EXT/QRCode) se corrigió\r\nAdvertencia:  [FAD03] La versión del perfil (FAC/ProfileID) se corrigió\r\nAdvertencia:  [FAB10a] El prefijo de la resolución debe coincidir con el prefijo (Document/ASP/CorporateRegistrationScheme_ID). Será corregido\r\nAdvertencia:  [FAK26] La Responsabilidad Fiscal del contribuyente en (Document/ACP/TaxLevelCode) () fué reemplazado por R-99-PN\r\nError:  [FAV06] El Valor Total en Document/IVL[4]/LineExtensionAmount no es un número válido\r\nError:  [FABB02] El Precio en Document/IVL[4]/PriceAmount no es un número válido\r\nError:  [FAW01] Si el valor indicado en Document/IVL[4]/LineExtensionAmount es '0' debe indicar un valor en Document/IVL[4]/AlternativeConditionPrice_PriceAmount\r\nError:  [FAU02] El Total Valor Bruto Antes de Tributos en Document/TOT/LineExtensionAmount (116300) debe coincidir con la suma del mismo valor en todos los renglones (641300)\r\n", 
+                               'tr_id': 0,
+                               'cufe': None, 'qr': None}
+                    '''           
+                    #print(factura)
+                    recibo = req.get("parametros", {})
+                    # se verifica si se presento error en la solicitud de emision d ela factura
+                    if factura.get("error_id") > 0:
+                        mensaje = factura.get("mensaje") if factura.get("mensaje") else factura.get("error_msg")
+                        datos_transaccion = {      "vigencia": recibo.get("vigencia"),
+                                                    "secuencia": recibo.get("secuencia"),
+                                                    "identificacion": recibo.get("identificacion"),
+                                                    "estado": "E",
+                                                    "estado_dian": "",
+                                                    "error_emision": mensaje,
+                                                    "id_transaccion": factura.get("tr_id"),
+                                                    "fecha_emision": "",
+                                                    "cufe": "",
+                                                    "qr_cod": ""
+                                                }
+                        respuesta['status'] = "error"
+                        respuesta['code'] = 422
+                        respuesta['resultado']['estado'] = "error"
+                        respuesta['resultado']['mensaje'] = "No fue posible procesar la solicitud de emitir la factura a Titanio."
+                        respuesta['resultado']['datos']= datos_transaccion
+                        
+                        return respuesta
+                    else:
+                        #recibo = req.get("parametros", {})
+                        param_search = {
+                            "token": acceso.get('token'),
+                            "transaccion_id": factura.get("tr_id")
+                        }
+                        search_trans = "/PDE/public/api/PDE/detalle"
+                        #search_result = consumepost_trans(host_titanio, search_trans, param_search)
+                        max_intentos = 3          # número de intentos
+                        espera_segundos = 5       # tiempo entre intentos
+                        search_result = None
+                        for intento in range(max_intentos):
+                            time.sleep(espera_segundos)
+                            search_result = consumepost_trans(host_titanio, search_trans, param_search)
+                            #print(f"Intento {intento+1}:", search_result)
+                            if not isinstance(search_result, dict):
+                                continue
+                            estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
+                            if estados:
+                                break
+
+                        # Inicializar variables
+                        estado_dian = None
+                        error_dian = ""
+                        fecha_emision = ""
+                        cufe = ""
+                        qr = ""
+
+                        # Validar estructura
+                        if isinstance(search_result, dict):
+                            estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
+                            lista_estados = [x.strip() for x in estados.split(",") if x.strip()]
+                            if len(lista_estados) >= 4:
+                                estado_dian = lista_estados[3]
+                            metadata = search_result.get('detalleMetadata', [])
+                            metadata_dict = {
+                                item.get("campo"): item.get("valor")
+                                for item in metadata if isinstance(item, dict)
+                            }
+
+                            if estado_dian:
+                                if "Rechazado" in estado_dian:
+                                    error_dian = (search_result.get("error") or search_result.get("mensaje") or "Documento rechazado por la DIAN" )
+                                    param_del = { "token": acceso.get('token'),
+                                                "transaccion": factura.get("tr_id")
+                                                }
+                                    #print(param_del)            
+                                    del_trans = "/PDE/public/api/PDE/borrar"
+                                    del_result = consumepost_trans(host_titanio, del_trans, param_del)
+                                elif "Validado" in estado_dian:
+                                    fecha_emision = metadata_dict.get("FECHA", "")
+                                    cufe = metadata_dict.get("CUFE", "")
+                                    qr = metadata_dict.get("QR", "")
+                        #else:
+                        #    print("⚠️ search_result no es válido:", search_result)
+
+                        datos_transaccion = {
+                            "vigencia": recibo.get("vigencia"),
+                            "secuencia": recibo.get("secuencia"),
+                            "identificacion": recibo.get("identificacion"),
+                            "estado_dian": estado_dian,
+                            "error_emision": error_dian,
+                            "id_transaccion": factura.get("tr_id"),
+                            "fecha_emision": fecha_emision, 
+                            "cufe": cufe,
+                            "qr_cod": qr
+                        }
+
+                        respuesta['status'] = "success"
+                        respuesta['code'] = 200
+                        respuesta['resultado']['estado'] = "success"
+                        respuesta['resultado']['mensaje'] = (
+                            f"Solicitud de generación de factura electrónica en Titanio, con estado {estado_dian}."
+                        )
+                        respuesta['resultado']['datos'] = datos_transaccion
+                        return respuesta
+
+                except requests.exceptions.Timeout:
+                    respuesta["status"] = "error"
+                    respuesta["code"] = 504
+                    respuesta["resultado"]["estado"] = "error"
+                    respuesta["resultado"]["mensaje"] = "Timeout al emitir la factura en Titanio."
+                    respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
+                    return respuesta
+                except requests.exceptions.RequestException as e:
+                    respuesta["status"] = "error"
+                    respuesta["code"] = 502
+                    respuesta["resultado"]["estado"] = "error"
+                    respuesta["resultado"]["mensaje"] = "Error de comunicación con Titanio al emitir la factura."
+                    respuesta["resultado"]["datos"] = {"detalle": str(e)}
+                    return respuesta
+                except Exception as e:
+                    #print("Ocurrió un error al emitir la factura: ", e)
+                    respuesta['status'] = "error"
+                    respuesta['code'] = 422
+                    respuesta['resultado']['estado'] = "error"
+                    respuesta['resultado']['mensaje'] = "No fue posible la solicitud de emitir la factura a Titanio."   
+                    return respuesta
+        else:
+            #print("Ocurrió un error al emitir la factura: ", e)
+            respuesta['status'] = "error"
+            respuesta['code'] = 404
+            respuesta['resultado']['estado'] = "error"
+            respuesta["resultado"]["mensaje"] = "Error al solicitar la emisión de la factura en Titanio."
+            respuesta["resultado"]["datos"] = {"detalle": "No existen datos validos del recibo con el consecutivo y vigencia enviados."}
+            return respuesta  
 
     except requests.exceptions.Timeout:
         respuesta["status"] = "error"
@@ -336,20 +365,57 @@ def loadData(resultado, conexion=""):
 
         # Si Titanio devolvió error
         if status != "success":
-            trazabilidad["registro_envio"] = estado_traza_error("emisión rechazada")
-            trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
-            resp = {
-                "estado": "error",
-                "mensaje": "No fue posible procesar la emisión de la factura.",
-                "datos": resultado.get("resultado", {}).get("datos", {}),
-                "trazabilidad": trazabilidad
-            }
-            response = Response(
-                json.dumps(resp, ensure_ascii=False),
-                content_type="application/json; charset=utf-8"
-            )
-            response.status_code = code if isinstance(code, int) else 422
-            return response
+            # . Registrar envío
+            try:
+                if code != 404:
+                    envio = registroEnvio(conexion, datos)
+                    if not isinstance(envio, dict) or envio.get("exec") is not True:
+                        trazabilidad["registro_envio"] = estado_traza_error("No registrado envío")
+                        trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
+                        resp = {
+                            "estado": "error",
+                            "mensaje": "No fue posible registrar el envío de la factura.",
+                            "datos": datos,
+                            "trazabilidad": trazabilidad
+                        }
+                        response = Response(
+                            json.dumps(resp, ensure_ascii=False),
+                            content_type="application/json; charset=utf-8"
+                        )
+                        response.status_code = 500
+                        return response
+                
+                trazabilidad["registro_envio"] = estado_traza_error("emisión rechazada")
+                trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
+                resp = {
+                    "estado": "error",
+                    "mensaje": "No fue posible procesar la emisión de la factura.",
+                    "datos": resultado.get("resultado", {}).get("datos", {}),
+                    "trazabilidad": trazabilidad
+                }
+                response = Response(
+                    json.dumps(resp, ensure_ascii=False),
+                    content_type="application/json; charset=utf-8"
+                )
+                response.status_code = code if isinstance(code, int) else 422
+                return response
+
+            except Exception:
+                trazabilidad["registro_envio"] = estado_traza_error("no registrado envío")
+                trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
+                resp = {
+                    "estado": "error",
+                    "mensaje": "Ocurrió un error al registrar el envío de la factura.",
+                    "datos": datos,
+                    "trazabilidad": trazabilidad
+                }
+                response = Response(
+                    json.dumps(resp, ensure_ascii=False),
+                    content_type="application/json; charset=utf-8"
+                )
+                response.status_code = 500
+                return response    
+
 
         # Validar datos mínimos
         if not isinstance(datos, dict) or not datos:

@@ -343,8 +343,10 @@ def registroEnvio(conexion, datos):
         "vigencia": int(datos.get("vigencia", 0)),
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
-        "error_msg":str(datos.get("error_dian", "")),
+        "error_msg":str(datos.get("error_emision", "")),
     }
+    #print(query)
+    #print(params)
     try:
         with conexion.cursor() as cursor:
             cursor.execute(query, params)
