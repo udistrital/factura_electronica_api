@@ -1,11 +1,3 @@
-"""
-Proyecto ODIN - Generador de servicios api-rest  
-Módulo: Generador reportes Api-rest
-Basado en framework Flask
-Author: Jairol Lavado.
-Fecha: Enero 2024
-versión: 0.0.0.1
-"""
 import json
 from datetime import datetime
 
@@ -249,8 +241,6 @@ def consultaRegistros(conexion,busqueda):
             "secuencia": int(busqueda.get("secuencia", 0)),
             "vigencia": int(busqueda.get("vigencia", 0))
         }
-        #print(query)
-        #print(params)
         try:
             with conexion.cursor() as cursor:
                 cursor.execute(query, params)
@@ -355,8 +345,6 @@ def registroEnvio(conexion, datos):
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
         "error_msg":str(datos.get("error_dian", "")),
     }
-    #print(query)
-    #print(params)
     try:
         with conexion.cursor() as cursor:
             cursor.execute(query, params)
@@ -374,6 +362,73 @@ def registroEnvio(conexion, datos):
         }
         return response
 
+def consultaSolicitudes(conexion, datos):
+    query = """
+        SELECT 
+            ENV_ID,
+            ENV_SECUENCIA, 
+            ENV_SECUENCIA_ANO, 
+            ENV_DATE,
+            ENV_STATE_SEND,
+            ENV_TR_ID,
+            ENV_ERROR,
+            ENV_STATE
+        FROM MNTFE.FEENVIO
+        WHERE
+        ENV_STATE='A'
+        AND ENV_STATE_SEND='S'
+    """
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True,"data": registros }
+        else:
+            return {"exec": False, "data": [], "message": "No se encontraron registros" }
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+def actualizaSolicitud(conexion, datos):
+    query = """
+        UPDATE MNTFE.FEENVIO
+        SET 
+        ENV_STATE_SEND = :estado
+        , ENV_ERROR = :error_msg
+        WHERE
+        ENV_TR_ID = :id_transaccion
+    """
+    params = {
+        "estado": str(datos.get("estado", "")),
+        "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
+        "error_msg":str(datos.get("error_dian", "")),
+    }
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params
+        }
+        return response
+    except Exception as e:
+        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+
+
 
 def actualizaEnvio(conexion, datos):
     query = """
@@ -387,8 +442,6 @@ def actualizaEnvio(conexion, datos):
         "secuencia": int(datos.get("secuencia", 0)),
         "vigencia": int(datos.get("vigencia", 0))
     }
-    #print(query)
-    #print(params)
     try:
         with conexion.cursor() as cursor:
             cursor.execute(query, params)
@@ -441,8 +494,6 @@ def registroCUFE(conexion, datos):
         "qr_code": str(datos.get("qr_cod", "")),
         "emision": fecha_emite
     }
-    #print(query)
-    #print(params)
     try:
         with conexion.cursor() as cursor:
             cursor.execute(query, params)
