@@ -39,16 +39,16 @@ def consultaRegistros(conexion,busqueda):
                             ),
                             'NOT' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                        'Note' VALUE 'OBSERVACIONES'
+                                        'Note' VALUE FAC_NOTE1
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'VENDEDOR PRINCIPAL'
+                                        'Note' : '""' FORMAT JSON
                                     ),
                                     JSON_OBJECT(
                                         'Note' VALUE NVL(TO_CHAR(FAC_COST_CENTER), '')
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE 'Pago por Transferencia Bancaria al Banco de Occidente, Cuenta de ahorros No. 230-81461-8'
+                                        'Note' VALUE FAC_NOTE4
                                     )
                             ),
 						    'ORD' VALUE JSON_OBJECT(
