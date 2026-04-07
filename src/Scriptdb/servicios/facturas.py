@@ -317,6 +317,54 @@ def registroEnvio(conexion, datos):
     query = """
         INSERT INTO MNTFE.FEENVIO
         (
+            ENV_SECUENCIA, 
+            ENV_SECUENCIA_ANO, 
+            ENV_DATE, 
+            ENV_STATE_SEND, 
+            ENV_TR_ID,  
+            ENV_ERROR, 
+            ENV_STATE
+        )
+        VALUES
+        (   :secuencia,
+            :vigencia,
+            SYSDATE,
+            :estado,
+            :id_transaccion,
+            :error_msg,
+            'A'
+        )
+    """
+    params = {
+        "secuencia": int(datos.get("secuencia", 0)),
+        "vigencia": int(datos.get("vigencia", 0)),
+        "estado": str(datos.get("estado", "")),
+        "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
+        "error_msg":str(datos.get("error_emision", "")),
+    }
+    #print(query)
+    #print(params)
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params
+        }
+        return response
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+def registroEnvioOLD(conexion, datos):
+    query = """
+        INSERT INTO MNTFE.FEENVIO
+        (
             ENV_ID,
             ENV_SECUENCIA, 
             ENV_SECUENCIA_ANO, 
@@ -363,6 +411,7 @@ def registroEnvio(conexion, datos):
             "error": str(e)
         }
         return response
+
 
 def consultaSolicitudes(conexion, datos):
     query = """
