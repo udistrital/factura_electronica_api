@@ -478,9 +478,6 @@ def actualizaSolicitud(conexion, datos):
         }
         return response
 
-
-
-
 def actualizaEnvio(conexion, datos):
     query = """
         UPDATE MNTFE.FEENVIO
@@ -509,8 +506,6 @@ def actualizaEnvio(conexion, datos):
             "error": str(e)
         }
         return response
-
-
 
 def registroCUFE(conexion, datos):
     query = """
@@ -562,6 +557,57 @@ def registroCUFE(conexion, datos):
         }
         return response
 
+def consultaPendientes(conexion, datos):
+    query = """
+        SELECT
+            fac.FAC_SECUENCIA,
+            fac.FAC_SECUENCIA_ANO,
+            fac.FAC_UUID,
+            fac.FAC_STATE,
+            fac.FAC_CREATION_DATE
+        FROM MNTFE.FEFACTURA fac
+        WHERE fac.FAC_STATE = 'A'
+        AND NOT EXISTS (
+            SELECT 1
+            FROM MNTFE.FEENVIO env
+            WHERE env.ENV_STATE = 'A'
+                AND env.ENV_STATE_SEND IN ('G', 'E', 'S')
+                AND env.ENV_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO
+                AND env.ENV_SECUENCIA = fac.FAC_SECUENCIA
+        )
+        ORDER BY fac.FAC_CREATION_DATE
+        FETCH FIRST :items ROWS ONLY
+    """
+    items = datos.get("items")
+    try:
+        items = int(items)
+        if items <= 0:
+            items = 20
+    except (TypeError, ValueError):
+        items = 210
+
+    params = {
+        "items": items
+        }
+
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            #cursor.execute(query)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True,"data": registros }
+        else:
+            return {"exec": False, "data": [], "message": "No se encontraron registros" }
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
 
 
 def consultaReporte(conexion,query,busqueda):
