@@ -11,6 +11,7 @@ sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
 from Controllers.servicios.emitirfactura import emitBill
 from Controllers.servicios.sincronizafactura import sincronizeBill
+from Controllers.servicios.ejecutarfactura import executeBill
 
 servicio = Blueprint("serv", __name__)
 ''' 
@@ -29,4 +30,10 @@ def bill_service():
 def sinc_service():
     data = request.get_json()
     respuesta = sincronizeBill(data)
+    return respuesta
+
+@servicio.route("/serv/exec", methods=["POST"])
+def exec_service():
+    data = request.get_json()
+    respuesta = executeBill(data)
     return respuesta
