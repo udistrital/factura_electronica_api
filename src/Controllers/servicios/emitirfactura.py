@@ -44,7 +44,11 @@ def emitBill(req=""):
         registro = data[0] if isinstance(data, list) and len(data) > 0 else {}
         estado_envio = registro.get("ENV_STATE_SEND")
         tr_id = registro.get("ENV_TR_ID")
-
+        # consulat coidgo de factura para titanio
+        code = consultaCodigoFactura(conexion,'')
+        datacode = code.get("data") or []
+        req['parametros']['tipo_transaccion']=datacode[0]["TD_TR_TYPE_COD"]
+        
         if not exec_flag or estado_envio == "C":
             #print("Se envia")
             registros = extractData(req, conexion)
@@ -113,7 +117,7 @@ def transformData(req,resultado):
                               }
                 }
 
-        if resultado :            
+        if resultado :     
             ## loguearse a plataforma Titanio
             host_titanio = os.getenv("TITANIO_HOST")
             login_titanio="/PDE/public/api/PDE/authentication"
@@ -148,14 +152,16 @@ def transformData(req,resultado):
                 respuesta['resultado']['mensaje'] = "No fue posible obtener el token de autenticación Titanio."
                 return respuesta
             else:
-                try:    
+                try:
                     factura_base64 = convertir_a_base64(resultado) 
                     param_bill={
                             "token": acceso['token'],
-                            "tr_tipo_id": 12839,
+                            "tr_tipo_id": req['parametros']['tipo_transaccion'],
                             "data": factura_base64
                         }    
+                    #print(param_bill)
                     emitir_titanio="/PDE/public/api/PDE/emitir_v2"
+                    #print(emitir_titanio)
                     factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
                     '''
                     factura = { 'error_id' : 0,

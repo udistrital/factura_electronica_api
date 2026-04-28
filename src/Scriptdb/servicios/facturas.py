@@ -1,6 +1,33 @@
 import json
 from datetime import datetime
 
+def consultaCodigoFactura(conexion, datos):
+    query = """
+        SELECT TD_DESCRIPTION, 
+        TD_TR_TYPE_COD
+        FROM MNTFE.FETIPODOCUMENTO
+        WHERE LOWER(TD_DESCRIPTION) LIKE 'factura%'
+    """
+    #print(query)
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True,"data": registros }
+        else:
+            return {"exec": False, "data": [], "message": "No se encontraron registros" }
+    except Exception as e:
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+
 def consultaRegistros(conexion,busqueda):
     try:
         with conexion.cursor() as cursor:
@@ -127,8 +154,7 @@ def consultaRegistros(conexion,busqueda):
                                         ON dfit.ITEM_ID = df.DF_STANDARD_ITEM_ID
                                     JOIN MNTFE.FEPRODUCTO dfpro 
                                         ON dfpro.PR_ID = df.DF_STANDARD_ITEM_ID_SCHEME_ID
-                                    WHERE df.DF_SECUENCIA = fac.FAC_SECUENCIA
-                                    AND df.DF_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO
+                                    WHERE df.DF_FAC_ID = fac.FAC_ID
                                 ),
                             'REC' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
@@ -221,26 +247,26 @@ def consultaRegistros(conexion,busqueda):
                         INNER JOIN MNTFE.FEPAIS emfp ON emfp.PA_ID = emf.EMF_COUNTRY_ID
                         INNER JOIN MNTFE.FECIUDADMUNICIPIO ecm ON ecm.CM_ID = emf.EMF_CM_ID 
                         INNER JOIN MNTFE.FEDEPARTAMENTO emfDm ON emfDm.DM_ID = ecm.CM_DM_ID 
-                        INNER JOIN MNTFE.FERECEPTOR recf ON recf.RCF_SECUENCIA  = fac.FAC_SECUENCIA AND recf.RCF_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO     
+                        INNER JOIN MNTFE.FERECEPTOR recf ON recf.RCF_FAC_ID = fac.FAC_ID     
                         INNER JOIN MNTFE.FETIPOIDENTIFICACION rti ON rti.TI_ID = recf.RCF_TAX_COMPANY_SCHEME_NAME_ID  
                         LEFT JOIN MNTFE.FERESPONSABILIDADFISCAL rrf ON rrf.RF_ID = recf.RCF_TAX_LEVEL_ID  
                         INNER JOIN MNTFE.FETIPOPERSONA rtp ON rtp.TP_ID = recf.RCF_ADDITIONAL_ACCOUNT_ID
-                        INNER JOIN MNTFE.FETOTALFACTURA totf ON totf.TOTF_SECUENCIA = fac.FAC_SECUENCIA AND totf.TOTF_SECUENCIA_ANO  = fac.FAC_SECUENCIA_ANO
-                        INNER JOIN MNTFE.FEPAGO pagf ON pagf.PAG_SECUENCIA  = fac.FAC_SECUENCIA AND pagf.PAG_SECUENCIA_ANO   = fac.FAC_SECUENCIA_ANO
+                        INNER JOIN MNTFE.FETOTALFACTURA totf ON totf.TOTF_FAC_ID = fac.FAC_ID
+                        INNER JOIN MNTFE.FEPAGO pagf ON pagf.PAG_FAC_ID  = fac.FAC_ID
                         INNER JOIN MNTFE.FEFORMAPAGO pfp ON pfp.FPAG_ID = pagf.PAG_FORM_ID 
                         LEFT JOIN MNTFE.FEMEDIOPAGO pmp ON pmp.MPAG_ID = pagf.PAG_PAYMENT_MEANS_ID  
-                        INNER JOIN MNTFE.FEDIRECCION addf ON addf.ADD_SECUENCIA = fac.FAC_SECUENCIA AND addf.ADD_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO
+                        INNER JOIN MNTFE.FEDIRECCION addf ON addf.ADD_FAC_ID = fac.FAC_ID
                         INNER JOIN MNTFE.FEPAIS addp ON addp.PA_ID = addf.ADD_COUNTRY_ID
                         INNER JOIN MNTFE.FECIUDADMUNICIPIO addcm ON addcm.CM_ID = addf.ADD_CM_ID 
                         INNER JOIN MNTFE.FEDEPARTAMENTO addDm ON addDm.DM_ID = addcm.CM_DM_ID 
-                        INNER JOIN MNTFE.FECONTACTO conf ON conf.CON_SECUENCIA  = fac.FAC_SECUENCIA AND conf.CON_SECUENCIA_ANO  = fac.FAC_SECUENCIA_ANO
-                        INNER JOIN MNTFE.FERECEPTORNOTIFICACION recnotf ON recnotf.REC_SECUENCIA  = fac.FAC_SECUENCIA AND recnotf.REC_SECUENCIA_ANO = fac.FAC_SECUENCIA_ANO
-                        WHERE fac.FAC_SECUENCIA = :secuencia AND fac.FAC_SECUENCIA_ANO = :vigencia
+                        INNER JOIN MNTFE.FECONTACTO conf ON conf.CON_FAC_ID = fac.FAC_ID
+                        INNER JOIN MNTFE.FERECEPTORNOTIFICACION recnotf ON recnotf.REC_FAC_ID = fac.FAC_ID
+                        WHERE FAC_CUSTOMIZATION_ID=1
+                        AND fac.FAC_ID = :factura
                 """
         params = {
-            "secuencia": int(busqueda.get("secuencia", 0)),
-            "vigencia": int(busqueda.get("vigencia", 0))
-        }
+                "factura": int(busqueda.get("id_factura", 0))
+            }
         try:
             with conexion.cursor() as cursor:
                 cursor.execute(query, params)
@@ -278,8 +304,7 @@ def consultaEnvio(conexion, datos):
     query = """
         SELECT 
             ENV_ID,
-            ENV_SECUENCIA, 
-            ENV_SECUENCIA_ANO, 
+            ENV_FAC_ID,
             ENV_DATE,
             ENV_STATE_SEND,
             ENV_TR_ID,
@@ -287,13 +312,11 @@ def consultaEnvio(conexion, datos):
             ENV_STATE
         FROM MNTFE.FEENVIO
         WHERE
-        ENV_SECUENCIA = :secuencia
-        AND ENV_SECUENCIA_ANO = :vigencia
+        ENV_FAC_ID = :factura
         AND ENV_STATE='A'
     """
     params = {
-        "secuencia": int(datos.get("secuencia", 0)),
-        "vigencia": int(datos.get("vigencia", 0))
+        "factura": int(datos.get("id_factura", 0))
     }
     try:
         with conexion.cursor() as cursor:
@@ -317,8 +340,7 @@ def registroEnvio(conexion, datos):
     query = """
         INSERT INTO MNTFE.FEENVIO
         (
-            ENV_SECUENCIA, 
-            ENV_SECUENCIA_ANO, 
+            ENV_FAC_ID, 
             ENV_DATE, 
             ENV_STATE_SEND, 
             ENV_TR_ID,  
@@ -326,8 +348,7 @@ def registroEnvio(conexion, datos):
             ENV_STATE
         )
         VALUES
-        (   :secuencia,
-            :vigencia,
+        (   :factura,
             SYSDATE,
             :estado,
             :id_transaccion,
@@ -336,12 +357,12 @@ def registroEnvio(conexion, datos):
         )
     """
     params = {
-        "secuencia": int(datos.get("secuencia", 0)),
-        "vigencia": int(datos.get("vigencia", 0)),
+        "factura": int(datos.get("id_factura", 0)),
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
         "error_msg":str(datos.get("error_emision", "")),
     }
+
     #print(query)
     #print(params)
     try:
@@ -417,8 +438,7 @@ def consultaSolicitudes(conexion, datos):
     query = """
         SELECT 
             ENV_ID,
-            ENV_SECUENCIA, 
-            ENV_SECUENCIA_ANO, 
+            ENV_FAC_ID, 
             ENV_DATE,
             ENV_STATE_SEND,
             ENV_TR_ID,
@@ -471,7 +491,7 @@ def actualizaSolicitud(conexion, datos):
         }
         return response
     except Exception as e:
-        print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
         response = {
             "exec": False,
             "error": str(e)
@@ -483,13 +503,12 @@ def actualizaEnvio(conexion, datos):
         UPDATE MNTFE.FEENVIO
         SET ENV_STATE = 'I'
         WHERE
-        ENV_SECUENCIA = :secuencia 
-        AND ENV_SECUENCIA_ANO = :vigencia 
+        ENV_FAC_ID = :transaccion
     """
     params = {
-        "secuencia": int(datos.get("secuencia", 0)),
-        "vigencia": int(datos.get("vigencia", 0))
+        "factura": int(datos.get("id_factura", 0))
     }
+
     try:
         with conexion.cursor() as cursor:
             cursor.execute(query, params)
@@ -514,8 +533,7 @@ def registroCUFE(conexion, datos):
         , FAC_QR=:qr_code
         , FAC_ISSUE_DATE=TO_DATE(:emision, 'YYYY-MM-DD HH24:MI:SS')
         WHERE 
-        FAC_SECUENCIA=:secuencia
-        AND FAC_SECUENCIA_ANO=:vigencia
+        FAC_ID = :factura
     """
 
     fecha_raw = datos.get("fecha_emision")
@@ -534,8 +552,7 @@ def registroCUFE(conexion, datos):
         fecha_emite = None
 
     params = {
-        "secuencia": int(datos.get("secuencia", 0)),
-        "vigencia": int(datos.get("vigencia", 0)),
+        "factura": int(datos.get("id_factura", 0)),
         "cufe": str(datos.get("cufe", "")),
         "qr_code": str(datos.get("qr_cod", "")),
         "emision": fecha_emite
@@ -608,7 +625,6 @@ def consultaPendientes(conexion, datos):
             "error": str(e)
         }
         return response
-
 
 def consultaReporte(conexion,query,busqueda):
     try:
