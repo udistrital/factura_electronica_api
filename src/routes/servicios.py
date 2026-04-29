@@ -11,6 +11,7 @@ sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
 from Controllers.servicios.emitirFactura import emitBill
 from Controllers.servicios.emitirNotaCredito import emitCredNote
+from Controllers.servicios.emitirNotaDebito import emitDebitNote
 from Controllers.servicios.sincronizaFactura import sincronizeBill
 from Controllers.servicios.ejecutarFactura import executeBill
 
@@ -32,6 +33,12 @@ def credit_service():
     data = request.get_json()
     respuesta = emitCredNote(data)
     return respuesta
+
+@servicio.route("/serv/debitnote", methods=["POST"])
+def debit_service():
+    data = request.get_json()
+    respuesta = emitDebitNote(data)
+    return respuesta    
 
 @servicio.route("/serv/sinc", methods=["POST"])
 def sinc_service():
