@@ -9,9 +9,10 @@ import os, sys
 p = os.path.abspath('src')
 sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
-from Controllers.servicios.emitirfactura import emitBill
-from Controllers.servicios.sincronizafactura import sincronizeBill
-from Controllers.servicios.ejecutarfactura import executeBill
+from Controllers.servicios.emitirFactura import emitBill
+from Controllers.servicios.emitirNotaCredito import emitCredNote
+from Controllers.servicios.sincronizaFactura import sincronizeBill
+from Controllers.servicios.ejecutarFactura import executeBill
 
 servicio = Blueprint("serv", __name__)
 ''' 
@@ -26,6 +27,12 @@ def bill_service():
     respuesta = emitBill(data)
     return respuesta
 
+@servicio.route("/serv/creditnote", methods=["POST"])
+def credit_service():
+    data = request.get_json()
+    respuesta = emitCredNote(data)
+    return respuesta
+
 @servicio.route("/serv/sinc", methods=["POST"])
 def sinc_service():
     data = request.get_json()
@@ -37,3 +44,4 @@ def exec_service():
     data = request.get_json()
     respuesta = executeBill(data)
     return respuesta
+
