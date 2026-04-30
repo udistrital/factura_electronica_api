@@ -378,7 +378,7 @@ def loadData(resultado, conexion=""):
                         trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                         resp = {
                             "estado": "error",
-                            "mensaje": "No fue posible registrar el envío de la factura.",
+                            "mensaje": f"No fue posible gestionar la transaccion. {mensaje_origen}",
                             "datos": datos,
                             "trazabilidad": trazabilidad
                         }
@@ -393,7 +393,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "No fue posible procesar la emisión de la factura.",
+                    "mensaje": f"No fue posible procesar la emisión de la transaccion. {mensaje_origen}",
                     "datos": resultado.get("resultado", {}).get("datos", {}),
                     "trazabilidad": trazabilidad
                 }
@@ -409,7 +409,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "Ocurrió un error al registrar el envío de la factura.",
+                    "mensaje": f"Ocurrió un error al gestionar la transaccion. {mensaje_origen}",
                     "datos": datos,
                     "trazabilidad": trazabilidad
                 }

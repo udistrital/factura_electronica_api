@@ -330,7 +330,6 @@ def transformData(req,resultado):
         respuesta['resultado']['mensaje'] = "No fue posible emitir la Nota Debito."
         return respuesta
 
-
 def loadData(resultado, conexion=""):
     try:
         #print("Resultado recibido:", resultado)
@@ -379,7 +378,7 @@ def loadData(resultado, conexion=""):
                         trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                         resp = {
                             "estado": "error",
-                            "mensaje": "No fue posible registrar el envío de la Nota Debito.",
+                            "mensaje": f"No fue posible gestionar la transaccion. {mensaje_origen}",
                             "datos": datos,
                             "trazabilidad": trazabilidad
                         }
@@ -394,7 +393,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "No fue posible procesar la emisión de la Nota Debito.",
+                    "mensaje": f"No fue posible procesar la emisión de la transaccion. {mensaje_origen}",
                     "datos": resultado.get("resultado", {}).get("datos", {}),
                     "trazabilidad": trazabilidad
                 }
@@ -410,7 +409,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "Ocurrió un error al registrar el envío de la Nota Debito.",
+                    "mensaje": f"Ocurrió un error al gestionar la transaccion. {mensaje_origen}",
                     "datos": datos,
                     "trazabilidad": trazabilidad
                 }
@@ -496,7 +495,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "No fue posible registrar el envío de la Nota Debito.",
+                    "mensaje": "No fue posible registrar el envío de la factura.",
                     "datos": datos,
                     "trazabilidad": trazabilidad
                 }
@@ -513,7 +512,7 @@ def loadData(resultado, conexion=""):
             trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
             resp = {
                 "estado": "error",
-                "mensaje": "Ocurrió un error al registrar el envío de la Nota Debito.",
+                "mensaje": "Ocurrió un error al registrar el envío de la factura.",
                 "datos": datos,
                 "trazabilidad": trazabilidad
             }
@@ -533,7 +532,7 @@ def loadData(resultado, conexion=""):
                         trazabilidad["actualizacion_factura"] = estado_traza_error("update factura")
                         resp = {
                             "estado": "error",
-                            "mensaje": "Se registró el envío, pero no fue posible actualizar la Nota Debito.",
+                            "mensaje": "Se registró el envío, pero no fue posible actualizar la factura.",
                             "datos": datos,
                             "trazabilidad": trazabilidad
                         }
@@ -549,7 +548,7 @@ def loadData(resultado, conexion=""):
                     trazabilidad["actualizacion_factura"] = estado_traza_error("update factura")
                     resp = {
                         "estado": "error",
-                        "mensaje": "Se registró el envío, pero ocurrió un error al actualizar la Nota Debito.",
+                        "mensaje": "Se registró el envío, pero ocurrió un error al actualizar la factura.",
                         "datos": datos,
                         "trazabilidad": trazabilidad
                     }
@@ -563,7 +562,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("datos incompletos")
                 resp = {
                     "estado": "error",
-                    "mensaje": "La Nota Debito fue validada, pero no llegaron datos suficientes para actualizar la Nota Debito.",
+                    "mensaje": "La factura fue validada, pero no llegaron datos suficientes para actualizar la factura.",
                     "datos": datos,
                     "trazabilidad": trazabilidad
                 }
@@ -593,7 +592,7 @@ def loadData(resultado, conexion=""):
     except Exception:
         resp = {
             "estado": "error",
-            "mensaje": "Ocurrió un error en el registro de la emisión de la Nota Debito.",
+            "mensaje": "Ocurrió un error en el registro de la emisión de la factura.",
             "datos": {},
             "trazabilidad": {
                 "registro_envio": {"estado": "error", "detalle": "error general"},
