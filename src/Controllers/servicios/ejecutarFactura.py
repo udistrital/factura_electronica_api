@@ -10,7 +10,7 @@ p = os.path.abspath("src")
 sys.path.insert(1, p)
 
 from Controllers.general.function_consume import consumepost
-from Scriptdb.servicios.facturas import consultaPendientes
+from Scriptdb.servicios.transaccion import consultaPendientes
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
 from Connect.mysqlbd import conectarMY
@@ -183,17 +183,19 @@ def transformData(req: Optional[Dict[str, Any]], resultado: Dict[str, Any]) -> D
 
 
 def process_bill_record(fila: Dict[str, Any], host_bill: str, url_bill: str) -> Dict[str, Any]:
+    id_factura = fila.get("FAC_ID", "")
     secuencia = fila.get("FAC_SECUENCIA", "")
     vigencia = fila.get("FAC_SECUENCIA_ANO", "")
 
-    payload = build_bill_payload(secuencia=secuencia, vigencia=vigencia, identificacion="")
+    payload = build_bill_payload(secuencia=secuencia, vigencia=vigencia, id_factura=id_factura)
 
     try:
-        logger.info("Procesando factura secuencia=%s vigencia=%s", secuencia, vigencia)
+        logger.info("Procesando factura id_factura=%s secuencia=%s vigencia=%s", id_factura, secuencia, vigencia)
         response = call_bill_service(host_bill, url_bill, payload)
         estado_proceso = evaluate_bill_response(response)
 
         return {
+            "id_factura": id_factura,
             "secuencia": secuencia,
             "vigencia": vigencia,
             "estado_proceso": estado_proceso,
@@ -203,6 +205,7 @@ def process_bill_record(fila: Dict[str, Any], host_bill: str, url_bill: str) -> 
     except requests.exceptions.Timeout as e:
         logger.warning("Timeout emitiendo factura secuencia=%s vigencia=%s", secuencia, vigencia)
         return {
+            "id_factura": id_factura,
             "secuencia": secuencia,
             "vigencia": vigencia,
             "estado_proceso": "error",
@@ -211,6 +214,7 @@ def process_bill_record(fila: Dict[str, Any], host_bill: str, url_bill: str) -> 
     except requests.exceptions.RequestException as e:
         logger.warning("Error HTTP emitiendo factura secuencia=%s vigencia=%s", secuencia, vigencia)
         return {
+            "id_factura": id_factura,
             "secuencia": secuencia,
             "vigencia": vigencia,
             "estado_proceso": "error",
@@ -219,6 +223,7 @@ def process_bill_record(fila: Dict[str, Any], host_bill: str, url_bill: str) -> 
     except Exception as e:
         logger.exception("Error procesando factura secuencia=%s vigencia=%s", secuencia, vigencia)
         return {
+            "id_factura": id_factura,
             "secuencia": secuencia,
             "vigencia": vigencia,
             "estado_proceso": "error",
@@ -227,12 +232,12 @@ def process_bill_record(fila: Dict[str, Any], host_bill: str, url_bill: str) -> 
 
 
 
-def build_bill_payload(secuencia: Any, vigencia: Any, identificacion: str = "") -> Dict[str, Any]:
+def build_bill_payload(secuencia: Any, vigencia: Any, id_factura: str = "") -> Dict[str, Any]:
     return {
         "parametros": {
             "secuencia": secuencia,
             "vigencia": vigencia,
-            "identificacion": identificacion,
+            "id_factura": id_factura,
         }
     }
 

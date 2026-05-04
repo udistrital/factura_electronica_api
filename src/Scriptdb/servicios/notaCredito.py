@@ -1,12 +1,12 @@
 import json
 from datetime import datetime
 
-def consultaCodigoFactura(conexion, datos):
+def consultaCodigoNotaCred(conexion, datos):
     query = """
         SELECT TD_DESCRIPTION, 
         TD_TR_TYPE_COD
         FROM MNTFE.FETIPODOCUMENTO
-        WHERE LOWER(TD_DESCRIPTION) LIKE 'factura%'
+        WHERE LOWER(TD_DESCRIPTION) LIKE LOWER('Nota crédito')
     """
     #print(query)
     try:
@@ -27,8 +27,7 @@ def consultaCodigoFactura(conexion, datos):
         }
         return response
 
-
-def consultaRegistroFactura(conexion,busqueda):
+def consultaRegistrosNotaCred(conexion,busqueda):
     try:
         with conexion.cursor() as cursor:
             query = """
@@ -51,36 +50,46 @@ def consultaRegistroFactura(conexion,busqueda):
                                 'AuthorizationProviderID_schemeID' VALUE TO_CHAR(CD_AUTHORIZATION_PROVIDER_ID_SCHEME_ID),
                                 'QRCode' : '""' FORMAT JSON
                             ),             
-                            'FAC' VALUE JSON_OBJECT(
+                            'CRE' VALUE JSON_OBJECT(
                                     'UBLVersionID' VALUE EF_UBL_VERSION_ID,
                                     'CustomizationID' VALUE TO_CODE,
                                     'ProfileID' VALUE EF_PROFILE_ID,
                                     'ProfileExecutionID' VALUE TO_CHAR(EF_PROFILE_EXECUTION_ID),
-                                    'ID' VALUE FAC_DOCUMENT_ID,
-                                    'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
+                                    'ID' VALUE nota.FAC_DOCUMENT_ID,
+                                    'UUID' VALUE NVL(TO_CHAR(nota.FAC_UUID), ''),
                                     'IssueDate' VALUE TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
                                     'IssueTime' VALUE TO_CHAR(SYSDATE, 'HH24:MI:SS'),
-                                    'InvoiceTypeCode' VALUE TO_CHAR(FAC_DOCUMENT_TYPE_ID, 'FM00'),
+                                    'CreditNoteTypeCode' VALUE nota.FAC_DOCUMENT_TYPE_ID,
                                     'DocumentCurrencyCode' VALUE EF_DOCUMENT_CURRENCY_CODE,
-                                    'LineCountNumeric' VALUE FAC_LINE_COUNT_NUMERIC
+                                    'LineCountNumeric' VALUE nota.FAC_LINE_COUNT_NUMERIC,
+                                    'DiscrepancyReferenceID' VALUE facRef.FAC_DOCUMENT_ID,
+                                    'DiscrepancyResponseCode' VALUE TO_CHAR(razNot.RNOT_COD),
+                                    'DiscrepancyResponseDescription' VALUE razNot.RNOT_DESCRIPTION 
                             ),
                             'NOT' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                        'Note' VALUE FAC_NOTE1
+                                        'Note' VALUE ('Factura: ' || facRef.FAC_DOCUMENT_ID || '/ ' || nota.FAC_NOTE1 || '/ Razón de nota: ' || razNot.RNOT_DESCRIPTION )
                                     ),
                                     JSON_OBJECT(
                                         'Note' : '""' FORMAT JSON
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE NVL(TO_CHAR(FAC_COST_CENTER), '')
+                                        'Note' VALUE NVL(TO_CHAR(nota.FAC_COST_CENTER), '')
                                     ),
                                     JSON_OBJECT(
-                                        'Note' VALUE FAC_NOTE4
+                                        'Note' VALUE nota.FAC_NOTE4
                                     )
                             ),
 						    'ORD' VALUE JSON_OBJECT(
 						      'ID': '""' FORMAT JSON
 						    ),
+						    'BRF' VALUE JSON_ARRAY(
+                                    JSON_OBJECT(
+                                        'Invoice_ID' VALUE facRef.FAC_DOCUMENT_ID,
+                                        'Invoice_UUID' VALUE facRef.FAC_UUID,
+                                        'Invoice_IssueDate' VALUE TO_CHAR(facRef.FAC_ISSUE_DATE,'YYYY-MM-DD') 
+                                    )
+                            ),
                             'ASP' VALUE JSON_OBJECT(
                                     'AdditionalAccountID' VALUE TO_CHAR(EMF_ADDITIONAL_ACCOUNT_ID),
                                     'PartyName' VALUE TO_CHAR(EMF_PARTY_NAME),
@@ -128,14 +137,14 @@ def consultaRegistroFactura(conexion,busqueda):
                                     'TaxInclusiveAmount' VALUE TOTF_TAX_INCLUSIVE_AMOUNT,
                                     'PayableAmount' VALUE TOTF_PAYABLE_AMOUNT
                                 ),
-                            'IVL' VALUE (
+                            'CNL' VALUE (
                                     SELECT JSON_ARRAYAGG(
                                         JSON_OBJECT(
                                             'ID' VALUE TO_CHAR(df.DF_LINE_ID),
-                                    		'UUID' VALUE NVL(TO_CHAR(FAC_UUID), ''),
+                                    		'UUID' VALUE NVL(TO_CHAR(nota.FAC_UUID), ''),
                                     		'Note': '""' FORMAT JSON,
-                                            'InvoicedQuantity' VALUE df.DF_QUANTITY,
-                                            'InvoicedQuantityUnitCode' VALUE TO_CHAR(dfum.UM_CODE),
+                                            'CreditedQuantity' VALUE df.DF_QUANTITY,
+                                            'CreditedQuantityUnitCode' VALUE TO_CHAR(dfum.UM_CODE),
                                             'LineExtensionAmount' VALUE df.DF_LINE_EXTENSION_AMOUNT,
                                             'PriceAmount' VALUE df.DF_PRICE_AMOUNT,
                                             'BaseQuantity' VALUE df.DF_BASE_QUANTITY,
@@ -154,7 +163,7 @@ def consultaRegistroFactura(conexion,busqueda):
                                         ON dfit.ITEM_ID = df.DF_STANDARD_ITEM_ID
                                     JOIN MNTFE.FEPRODUCTO dfpro 
                                         ON dfpro.PR_ID = df.DF_STANDARD_ITEM_ID_SCHEME_ID
-                                    WHERE df.DF_FAC_ID = fac.FAC_ID
+                                    WHERE df.DF_FAC_ID = nota.FAC_ID
                                 ),
                             'REC' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
@@ -233,39 +242,41 @@ def consultaRegistroFactura(conexion,busqueda):
                         )
                         RETURNING CLOB
                         ) AS json_result
-                        FROM MNTFE.FEFACTURA fac
-                        INNER JOIN MNTFE.FERESOLUCION re ON re.RES_ID = fac.FAC_RF_ID 
+                        FROM MNTFE.FEFACTURA nota
+                        INNER JOIN MNTFE.FERESOLUCION re ON re.RES_ID = nota.FAC_RF_ID 
                         INNER JOIN MNTFE.FECONFIGURACIONDIAN confd ON confd.CD_ID = re.RES_CONFIGURACION_ID
-                        INNER JOIN MNTFE.FETIPOOPERACION fto ON fto.TO_ID = fac.FAC_CUSTOMIZATION_ID  
-                        INNER JOIN MNTFE.FETIPODOCUMENTO ftd ON ftd.TD_ID = fac.FAC_DOCUMENT_TYPE_ID   
-                        INNER JOIN MNTFE.FEENCABEZADO encf ON encf.EF_ID = fac.FAC_EF_ID 
+                        INNER JOIN MNTFE.FETIPOOPERACION fto ON fto.TO_ID = nota.FAC_CUSTOMIZATION_ID  
+                        INNER JOIN MNTFE.FETIPODOCUMENTO ftd ON ftd.TD_ID = nota.FAC_DOCUMENT_TYPE_ID   
+                        INNER JOIN MNTFE.FEENCABEZADO encf ON encf.EF_ID = nota.FAC_EF_ID 
                         INNER JOIN MNTFE.FEAMBIENTEDESTINO ad ON ad.AD_ID = encf.EF_PROFILE_EXECUTION_ID   
-                        INNER JOIN MNTFE.FEEMISOR emf ON emf.EMF_ID = fac.FAC_EMF_ID   
+                        INNER JOIN MNTFE.FEEMISOR emf ON emf.EMF_ID = nota.FAC_EMF_ID   
                         INNER JOIN MNTFE.FETIPOIDENTIFICACION eti ON eti.TI_ID = emf.EMF_TAX_COMPANY_SCHEME_NAME_ID 
                         INNER JOIN MNTFE.FERESPONSABILIDADFISCAL erf ON erf.RF_ID = emf.EMF_TAX_LEVEL_ID 
                         INNER JOIN MNTFE.FETIPOPERSONA etp ON etp.TP_ID = emf.EMF_ADDITIONAL_ACCOUNT_ID 
                         INNER JOIN MNTFE.FEPAIS emfp ON emfp.PA_ID = emf.EMF_COUNTRY_ID
                         INNER JOIN MNTFE.FECIUDADMUNICIPIO ecm ON ecm.CM_ID = emf.EMF_CM_ID 
                         INNER JOIN MNTFE.FEDEPARTAMENTO emfDm ON emfDm.DM_ID = ecm.CM_DM_ID 
-                        INNER JOIN MNTFE.FERECEPTOR recf ON recf.RCF_FAC_ID = fac.FAC_ID     
+                        INNER JOIN MNTFE.FERECEPTOR recf ON recf.RCF_FAC_ID = nota.FAC_ID     
                         INNER JOIN MNTFE.FETIPOIDENTIFICACION rti ON rti.TI_ID = recf.RCF_TAX_COMPANY_SCHEME_NAME_ID  
                         LEFT JOIN MNTFE.FERESPONSABILIDADFISCAL rrf ON rrf.RF_ID = recf.RCF_TAX_LEVEL_ID  
                         INNER JOIN MNTFE.FETIPOPERSONA rtp ON rtp.TP_ID = recf.RCF_ADDITIONAL_ACCOUNT_ID
-                        INNER JOIN MNTFE.FETOTALFACTURA totf ON totf.TOTF_FAC_ID = fac.FAC_ID
-                        INNER JOIN MNTFE.FEPAGO pagf ON pagf.PAG_FAC_ID  = fac.FAC_ID
+                        INNER JOIN MNTFE.FETOTALFACTURA totf ON totf.TOTF_FAC_ID = nota.FAC_ID
+                        INNER JOIN MNTFE.FEPAGO pagf ON pagf.PAG_FAC_ID  = nota.FAC_ID
                         INNER JOIN MNTFE.FEFORMAPAGO pfp ON pfp.FPAG_ID = pagf.PAG_FORM_ID 
                         LEFT JOIN MNTFE.FEMEDIOPAGO pmp ON pmp.MPAG_ID = pagf.PAG_PAYMENT_MEANS_ID  
-                        INNER JOIN MNTFE.FEDIRECCION addf ON addf.ADD_FAC_ID = fac.FAC_ID
+                        INNER JOIN MNTFE.FEDIRECCION addf ON addf.ADD_FAC_ID = nota.FAC_ID
                         INNER JOIN MNTFE.FEPAIS addp ON addp.PA_ID = addf.ADD_COUNTRY_ID
                         INNER JOIN MNTFE.FECIUDADMUNICIPIO addcm ON addcm.CM_ID = addf.ADD_CM_ID 
                         INNER JOIN MNTFE.FEDEPARTAMENTO addDm ON addDm.DM_ID = addcm.CM_DM_ID 
-                        INNER JOIN MNTFE.FECONTACTO conf ON conf.CON_FAC_ID = fac.FAC_ID
-                        INNER JOIN MNTFE.FERECEPTORNOTIFICACION recnotf ON recnotf.REC_FAC_ID = fac.FAC_ID
-                        WHERE FAC_CUSTOMIZATION_ID=1
-                        AND fac.FAC_ID = :factura
+                        INNER JOIN MNTFE.FECONTACTO conf ON conf.CON_FAC_ID  = nota.FAC_ID
+                        INNER JOIN MNTFE.FERECEPTORNOTIFICACION recnotf ON recnotf.REC_FAC_ID  = nota.FAC_ID
+                        INNER JOIN MNTFE.FEFACTURA facRef ON facRef.FAC_ID  = nota.FAC_REFERENCE_ID 
+                        LEFT JOIN MNTFE.FERAZONNOTA razNot ON nota.FAC_RNOT_ID = razNot.RNOT_ID                
+                        WHERE nota.FAC_CUSTOMIZATION_ID = 2 
+                        AND nota.FAC_ID = :notaCredito
                 """
         params = {
-                "factura": int(busqueda.get("id_factura", 0))
+                "notaCredito": int(busqueda.get("id_factura", 0))
             }
         try:
             with conexion.cursor() as cursor:

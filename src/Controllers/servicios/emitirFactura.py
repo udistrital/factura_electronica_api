@@ -14,6 +14,7 @@ from Controllers.general.function_jwt import write_token, validate_token
 from Controllers.general.function_crypto import desencriptar_variable, keyEncode
 from Controllers.general.function_consume import consumepost_bearer, consumepost, consumepost_trans
 #from Connect.default_pgbd import conexion ## activar para conexión por defecto
+from Scriptdb.servicios.transaccion import * 
 from Scriptdb.servicios.facturas import * 
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
@@ -44,9 +45,12 @@ def emitBill(req=""):
         registro = data[0] if isinstance(data, list) and len(data) > 0 else {}
         estado_envio = registro.get("ENV_STATE_SEND")
         tr_id = registro.get("ENV_TR_ID")
-
+        # consulat coidgo de factura para titanio
+        code = consultaCodigoFactura(conexion,'')
+        datacode = code.get("data") or []
+        req['parametros']['tipo_transaccion']=datacode[0]["TD_TR_TYPE_COD"]
+        
         if not exec_flag or estado_envio == "C":
-            #print("Se envia")
             registros = extractData(req, conexion)
             resultado = transformData(req, registros)
             respuesta = loadData(resultado, conexion)
@@ -83,7 +87,7 @@ def emitBill(req=""):
         return respuesta
     except Exception as e:
         #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
-        respuesta = {"Error":"No fue posible procesar la emisión de la factura a Titanio"}
+        respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
         return respuesta
     #finally:
     #    conexion.close()        
@@ -92,7 +96,7 @@ def emitBill(req=""):
 def extractData(busqueda="",conexion=""):
     try:
         recibo=busqueda.get('parametros')
-        data = consultaRegistros(conexion,recibo)
+        data = consultaRegistroFactura(conexion,recibo)
         json_text = data['data'][0]['JSON_RESULT'].read()
         datos = json.loads(json_text)
         return datos
@@ -112,8 +116,7 @@ def transformData(req,resultado):
                                 "datos": ""
                               }
                 }
-
-        if resultado :            
+        if resultado :     
             ## loguearse a plataforma Titanio
             host_titanio = os.getenv("TITANIO_HOST")
             login_titanio="/PDE/public/api/PDE/authentication"
@@ -148,22 +151,24 @@ def transformData(req,resultado):
                 respuesta['resultado']['mensaje'] = "No fue posible obtener el token de autenticación Titanio."
                 return respuesta
             else:
-                try:    
+                try:
                     factura_base64 = convertir_a_base64(resultado) 
                     param_bill={
                             "token": acceso['token'],
-                            "tr_tipo_id": 12839,
+                            "tr_tipo_id": req['parametros']['tipo_transaccion'],
                             "data": factura_base64
                         }    
+                    #print(param_bill)
                     emitir_titanio="/PDE/public/api/PDE/emitir_v2"
+                    #print(emitir_titanio)
                     factura=consumepost_trans(host_titanio,emitir_titanio,param_bill)
                     '''
                     factura = { 'error_id' : 0,
                                 'error_msg' : 'Se realizo con exito la operacion.',
                                 'mensaje' : ' ----------------------------\r\nMensajes de Conversión a Dataset:\r\nIniciando Conversión\r\nExcepción de conversión: \r\nEtiqueta final inesperada. línea 2, posición 3.\r\n\r\n----------------------------\r\nMensajes de la validación del Dataset:\r\nAdvertencia:[FAB36] El código QR (EXT/QRCode) se corrigió\r\n----------------------------\r\nMensajes de Conversión a UBL:\r\nIniciando Conversión\r\nTerminando Conversión\r\n\r\n----------------------------\r\nMensajes de la validación del UBL:\r\nXML Válido:\r\n----------------------------\r\nMensajes de Agregar a Cola:\r\nSe agrego a la cola con exito.\r\n.',
-                                'tr_id' : 3873108,
-                                'cufe': 'fc4a8bb60d850f198e4430f5cb0214ee25683d25b850cde840ce3795e83d959a25a5df61672c4994dd539071332f190c',
-                                'qr': ' NumFac: SETP90000507\r\nFe...',
+                                'tr_id' : 3910187,
+                                'cufe': '2661415c033b633a387f9c7514ab70f24907c473c711fbf6be5197574bbd4c98573029bf46135fa2b4ed0c59e3785406',
+                                'qr': 'NumFac: SETT12019\nFecFac: 2026-04-28\nHorFac: 09:17:41-05:00\nNitFac: 899999230\nDocAdq: 12345678\nValFac: 90900.00\nValIva: 0.00\nValOtroIm: 0.00\nValTolFac: 90900.00\nCUFE: 2661415c033b633a387f9c7514ab70f24907c473c711fbf6be5197574bbd4c98573029bf46135fa2b4ed0c59e3785406\nQRCode: https:\/\/catalogo-vpfe-hab.dian.gov.co\/document\/searchqr?documentkey=2661415c033b633a387f9c7514ab70f24907c473c711fbf6be5197574bbd4c98573029bf46135fa2b4ed0c59e3785406',
                                 }
                     '''
                     '''
@@ -172,14 +177,13 @@ def transformData(req,resultado):
                                'tr_id': 0,
                                'cufe': None, 'qr': None}
                     '''           
-                    #print(factura)
                     recibo = req.get("parametros", {})
                     # se verifica si se presento error en la solicitud de emision d ela factura
                     if factura.get("error_id") > 0:
                         mensaje = factura.get("mensaje") if factura.get("mensaje") else factura.get("error_msg")
                         datos_transaccion = {      "vigencia": recibo.get("vigencia"),
                                                     "secuencia": recibo.get("secuencia"),
-                                                    "identificacion": recibo.get("identificacion"),
+                                                    "id_factura": recibo.get("id_factura"),
                                                     "estado": "E",
                                                     "estado_dian": "",
                                                     "error_emision": mensaje,
@@ -254,7 +258,7 @@ def transformData(req,resultado):
                         datos_transaccion = {
                             "vigencia": recibo.get("vigencia"),
                             "secuencia": recibo.get("secuencia"),
-                            "identificacion": recibo.get("identificacion"),
+                            "id_factura": recibo.get("id_factura"),
                             "estado_dian": estado_dian,
                             "error_emision": error_dian,
                             "id_transaccion": factura.get("tr_id"),
@@ -374,7 +378,7 @@ def loadData(resultado, conexion=""):
                         trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                         resp = {
                             "estado": "error",
-                            "mensaje": "No fue posible registrar el envío de la factura.",
+                            "mensaje": f"No fue posible gestionar la transaccion. {mensaje_origen}",
                             "datos": datos,
                             "trazabilidad": trazabilidad
                         }
@@ -389,7 +393,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "No fue posible procesar la emisión de la factura.",
+                    "mensaje": f"No fue posible procesar la emisión de la transaccion. {mensaje_origen}",
                     "datos": resultado.get("resultado", {}).get("datos", {}),
                     "trazabilidad": trazabilidad
                 }
@@ -405,7 +409,7 @@ def loadData(resultado, conexion=""):
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
                     "estado": "error",
-                    "mensaje": "Ocurrió un error al registrar el envío de la factura.",
+                    "mensaje": f"Ocurrió un error al gestionar la transaccion. {mensaje_origen}",
                     "datos": datos,
                     "trazabilidad": trazabilidad
                 }
@@ -445,7 +449,7 @@ def loadData(resultado, conexion=""):
             datos["estado"] = "S"
 
         # 1. Actualizar envío anterior si existe
-        try:
+        try: 
             envioant = actualizaEnvio(conexion, datos)
             # No bloquear si no encontró registros previos
             if isinstance(envioant, dict) and envioant.get("exec") is False:

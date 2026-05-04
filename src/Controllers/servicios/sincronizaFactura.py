@@ -14,6 +14,7 @@ from Controllers.general.function_jwt import write_token, validate_token
 from Controllers.general.function_crypto import desencriptar_variable, keyEncode
 from Controllers.general.function_consume import consumepost_bearer, consumepost, consumepost_trans
 #from Connect.default_pgbd import conexion ## activar para conexión por defecto
+from Scriptdb.servicios.transaccion import * 
 from Scriptdb.servicios.facturas import * 
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
@@ -53,9 +54,10 @@ def sincronizeBill(req=""):
                 if estado_envio == "S":
                     # Construir request dinámico si lo necesitas
                     solicitud = {
-                                "secuencia": registro.get("ENV_SECUENCIA"),
-                                "vigencia": registro.get("ENV_SECUENCIA_ANO"),
-                                "transaccion": registro.get("ENV_TR_ID")  # ajusta si aplica
+                                "secuencia": registro.get("FAC_SECUENCIA"),
+                                "vigencia": registro.get("FAC_SECUENCIA_ANO"),
+                                "transaccion": registro.get("ENV_TR_ID"),  # ajusta si aplica
+                                "id_factura": registro.get("ENV_FAC_ID")  # ajusta si aplica
                                 }
                     # print(solicitud)
                     # 1. Transformar
@@ -80,7 +82,7 @@ def sincronizeBill(req=""):
         return respuestas
     except Exception as e:
         #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
-        respuesta = {"Error":"No fue posible procesar la emisión de la factura a Titanio"}
+        respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
         return respuesta
     #finally:
     #    conexion.close()        
@@ -192,11 +194,10 @@ def transformData(req,resultado):
                             qr = metadata_dict.get("QR", "")
                 #else:
                 #    print("⚠️ search_result no es válido:", search_result)
-
                 datos_transaccion = {
                     "vigencia": resultado.get("vigencia"),
                     "secuencia": resultado.get("secuencia"),
-                    "identificacion": resultado.get("identificacion"),
+                    "id_factura": resultado.get("id_factura"),
                     "estado_dian": estado_dian,
                     "error_emision": error_dian,
                     "id_transaccion": resultado.get("transaccion"),
