@@ -3,6 +3,7 @@ import base64
 import bcrypt
 from flask import request, jsonify, Response
 import numpy
+import requests
 import time
 from datetime import datetime
 import uuid
@@ -28,6 +29,7 @@ except Exception:
 
 '''Funcion controladora del proceso ETL'''
 def emitBill(req=""):
+    conexion = None
     try:
         #token = request.headers['Authorization'].split(" ")[1]
         #user=validate_token(token,output=True)
@@ -89,8 +91,12 @@ def emitBill(req=""):
         #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
         respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
         return respuesta
-    #finally:
-    #    conexion.close()        
+    finally:
+        if conexion:
+            try:
+                conexion.close()
+            except Exception:
+                pass
 
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
@@ -178,6 +184,25 @@ def transformData(req,resultado):
                                'cufe': None, 'qr': None}
                     '''           
                     recibo = req.get("parametros", {})
+                    if not isinstance(factura, dict):
+                        datos_transaccion = {      "vigencia": recibo.get("vigencia"),
+                                                    "secuencia": recibo.get("secuencia"),
+                                                    "id_factura": recibo.get("id_factura"),
+                                                    "estado": "E",
+                                                    "estado_dian": "",
+                                                    "error_emision": "No se obtuvo respuesta válida de Titanio al emitir la factura.",
+                                                    "id_transaccion": 0,
+                                                    "fecha_emision": "",
+                                                    "cufe": "",
+                                                    "qr_cod": ""
+                                                }
+                        respuesta['status'] = "error"
+                        respuesta['code'] = 504
+                        respuesta['resultado']['estado'] = "error"
+                        respuesta['resultado']['mensaje'] = "No fue posible obtener respuesta de Titanio al emitir la factura."
+                        respuesta['resultado']['datos'] = datos_transaccion
+                        return respuesta
+
                     # se verifica si se presento error en la solicitud de emision d ela factura
                     if factura.get("error_id") > 0:
                         mensaje = factura.get("mensaje") if factura.get("mensaje") else factura.get("error_msg")
