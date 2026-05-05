@@ -66,7 +66,7 @@ def consultaRegistrosNotaDeb(conexion,busqueda):
                             ),
                             'NOT' VALUE JSON_ARRAY(
                                     JSON_OBJECT(
-                                        'Note' VALUE ('Factura: ' || facRef.FAC_DOCUMENT_ID || '/ ' || nota.FAC_NOTE1 || '/ Razón de nota: ' || razNot.RNOT_DESCRIPTION )
+                                        'Note' VALUE (nota.FAC_NOTE1 || ' / Razón de nota: ' || razNot.RNOT_DESCRIPTION )
                                     ),
                                     JSON_OBJECT(
                                         'Note' : '""' FORMAT JSON
@@ -112,6 +112,7 @@ def consultaRegistrosNotaDeb(conexion,busqueda):
                                     'Physical_ADD_ID' VALUE '2',
                                     'Tax_RegistrationName' VALUE TO_CHAR(RCF_TAX_REGISTRATION_NAME),
                                     'Tax_CompanyID' VALUE TO_CHAR(RCF_TAX_COMPANY_ID),
+                                    'Tax_CompanyID_schemeID' VALUE NVL(TO_CHAR(RCF_TAX_COMPANY_SCHEME_ID), ''),
                                     'Tax_CompanyID_schemeName' VALUE TO_CHAR(RCF_TAX_COMPANY_SCHEME_NAME_ID),
                                     'Tax_LevelCode' VALUE NVL(TO_CHAR(rrf.RF_CODE), ''),
                                     'Tax_LevelCode_listName' VALUE NVL(TO_CHAR(RCF_TAX_LEVEL_CODE_LIST_NAME), ''),
@@ -124,7 +125,7 @@ def consultaRegistrosNotaDeb(conexion,busqueda):
                                     JSON_OBJECT(
                                         'ID' VALUE TO_CHAR(PAG_FORM_ID),
                                         'PaymentMeansCode' VALUE NVL(TO_CHAR(PAG_PAYMENT_MEANS_ID), ''),
-                                        'PaymentDueDate' VALUE NVL(TO_CHAR(PAG_PAYMENT_DUE_DATE,'YYYY-MM-DD'), TO_CHAR(SYSDATE, 'YYYY-MM-DD')), 
+                                        'PaymentDueDate' VALUE TO_CHAR(SYSDATE, 'YYYY-MM-DD'), 
                                         'InstructionNote': '""' FORMAT JSON,
                                         'PaymentID': '""' FORMAT JSON
                                     )
@@ -269,7 +270,7 @@ def consultaRegistrosNotaDeb(conexion,busqueda):
                         INNER JOIN MNTFE.FECONTACTO conf ON conf.CON_FAC_ID  = nota.FAC_ID
                         INNER JOIN MNTFE.FERECEPTORNOTIFICACION recnotf ON recnotf.REC_FAC_ID  = nota.FAC_ID
                         INNER JOIN MNTFE.FEFACTURA facRef ON facRef.FAC_ID  = nota.FAC_REFERENCE_ID 
-                        LEFT JOIN MNTFE.FERAZONNOTA razNot ON nota.FAC_RNOT_ID = razNot.RNOT_ID                  
+                        LEFT JOIN MNTFE.FERAZONNOTA razNot ON nota.FAC_RNOT_ID = razNot.RNOT_ID                   
                         WHERE nota.FAC_CUSTOMIZATION_ID = 3 
                         AND nota.FAC_ID = :notaDebito
                 """
