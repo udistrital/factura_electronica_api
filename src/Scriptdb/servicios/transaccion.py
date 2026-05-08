@@ -166,6 +166,98 @@ def consultaSolicitudes(conexion, datos):
         }
         return response
 
+def consultaEnviosDocumentoDuplicado(conexion, datos=None):
+    query = """
+        SELECT
+            ENV_ID,
+            ENV_ERROR
+        FROM MNTFE.FEENVIO
+        WHERE
+        ENV_STATE = 'A'
+        AND ENV_STATE_SEND = 'E'
+        AND UPPER(ENV_ERROR) LIKE '%ERROR AL CREAR LA TRANSACCION. DOCUMENTO DUPLICADO.%'
+        AND REGEXP_LIKE(ENV_ERROR, 'TR_ID[[:space:]]*:[[:space:]]*[[:digit:]]+')
+    """
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True, "data": registros}
+        return {"exec": False, "data": [], "message": "No se encontraron registros"}
+    except Exception as e:
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+def actualizaEnvioDocumentoDuplicado(conexion, datos):
+    query = """
+        UPDATE MNTFE.FEENVIO
+        SET
+        ENV_TR_ID = :id_transaccion,
+        ENV_STATE_SEND = 'S'
+        WHERE
+        ENV_ID = :envio
+        AND ENV_STATE = 'A'
+        AND ENV_STATE_SEND = 'E'
+    """
+    params = {
+        "envio": int(datos.get("envio", 0)),
+        "id_transaccion": int(datos.get("id_transaccion", 0))
+    }
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            filas = cursor.rowcount
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params,
+            "rows": filas
+        }
+        return response
+    except Exception as e:
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
+def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
+    query = """
+        UPDATE MNTFE.FEENVIO
+        SET
+        ENV_STATE_SEND = 'C'
+        WHERE
+        ENV_STATE = 'A'
+        AND ENV_STATE_SEND = 'E'
+        AND TRIM(ENV_ERROR) = :error_msg
+    """
+    params = {
+        "error_msg": "No se obtuvo respuesta válida de Titanio al emitir la factura."
+    }
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query, params)
+            filas = cursor.rowcount
+            conexion.commit()
+        response = {
+            "exec": True,
+            "data": params,
+            "rows": filas
+        }
+        return response
+    except Exception as e:
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
 def actualizaSolicitud(conexion, datos):
     query = """
         UPDATE MNTFE.FEENVIO

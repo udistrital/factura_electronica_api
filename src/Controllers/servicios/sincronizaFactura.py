@@ -33,6 +33,10 @@ def sincronizeBill(req=""):
         #user=validate_token(token,output=True)
         conexion=switchconn('oracle')
         params=req.get('parametros')
+        try:
+            corrigeEnviosConError(conexion, params)
+        except Exception:
+            pass
         envio = consultaSolicitudes(conexion,params)
         exec_flag = envio.get("exec")
         # Normalizar exec
@@ -87,12 +91,146 @@ def sincronizeBill(req=""):
     #finally:
     #    conexion.close()        
 
+def corrigeEnviosConError(conexion, datos=None):
+    sin_respuesta = actualizaEnviosSinRespuestaTitanio(conexion, datos)
+    duplicados = corrigeEnviosDocumentoDuplicado(conexion, datos)
+    duplicados_ok = (
+        isinstance(duplicados, dict)
+        and (
+            duplicados.get("exec") is True
+            or duplicados.get("message") == "No se encontraron registros"
+        )
+    )
+
+    return {
+        "exec": (
+            isinstance(sin_respuesta, dict)
+            and sin_respuesta.get("exec") is True
+            and duplicados_ok
+        ),
+        "data": {
+            "sin_respuesta_titanio": sin_respuesta,
+            "documento_duplicado": duplicados
+        }
+    }
+
+def corrigeEnviosDocumentoDuplicado(conexion, datos=None):
+    envios = consultaEnviosDocumentoDuplicado(conexion, datos)
+    if not isinstance(envios, dict) or envios.get("exec") is not True:
+        return envios
+
+    respuestas = []
+    for envio in envios.get("data") or []:
+        error = envio.get("ENV_ERROR", "")
+        if hasattr(error, "read"):
+            error = error.read()
+
+        match = re.search(r"TR_ID\s*:\s*(\d+)", str(error or ""), re.IGNORECASE)
+        if not match:
+            continue
+
+        respuesta = actualizaEnvioDocumentoDuplicado(
+            conexion,
+            {
+                "envio": envio.get("ENV_ID"),
+                "id_transaccion": match.group(1)
+            }
+        )
+        respuestas.append(respuesta)
+
+    return {
+        "exec": True,
+        "data": respuestas,
+        "total": len(respuestas)
+    }
+
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
     try:
         return [] 
     except Exception as e:
         return []  
+
+def normalizaClaveMetadata(valor):
+    return re.sub(r"[^A-Z0-9]", "", str(valor or "").upper())
+
+def obtieneValorMetadata(metadata, *claves):
+    claves_normalizadas = {normalizaClaveMetadata(clave) for clave in claves}
+
+    if isinstance(metadata, dict):
+        for clave, valor in metadata.items():
+            if normalizaClaveMetadata(clave) in claves_normalizadas and valor not in [None, ""]:
+                return valor
+
+    if isinstance(metadata, list):
+        for item in metadata:
+            if not isinstance(item, dict):
+                continue
+
+            campo = (
+                item.get("campo")
+                or item.get("nombre")
+                or item.get("name")
+                or item.get("key")
+                or item.get("codigo")
+            )
+            valor = item.get("valor")
+            if valor in [None, ""]:
+                valor = item.get("value") or item.get("dato")
+
+            if normalizaClaveMetadata(campo) in claves_normalizadas and valor not in [None, ""]:
+                return valor
+
+            for clave, valor_directo in item.items():
+                if normalizaClaveMetadata(clave) in claves_normalizadas and valor_directo not in [None, ""]:
+                    return valor_directo
+
+    return ""
+
+def extraeDetalleTitanio(search_result):
+    detalle = {
+        "estado_dian": None,
+        "fecha_emision": "",
+        "cufe": "",
+        "qr": ""
+    }
+
+    if not isinstance(search_result, dict):
+        return detalle
+
+    detalle_transaccion = search_result.get('detalleTransaccion') or {}
+    estados = ""
+    if isinstance(detalle_transaccion, dict):
+        estados = detalle_transaccion.get('estado_id', '')
+    if not estados:
+        estados = search_result.get("estado_id", "")
+    lista_estados = [x.strip() for x in str(estados).split(",") if x.strip()]
+    if len(lista_estados) >= 4:
+        detalle["estado_dian"] = lista_estados[3]
+
+    metadata = search_result.get('detalleMetadata', [])
+    detalle["fecha_emision"] = (
+        obtieneValorMetadata(metadata, "FECHA", "FECHA_EMISION", "FECHAEMISION")
+        or search_result.get("fecha_emision")
+        or search_result.get("fecha")
+        or ""
+    )
+    detalle["cufe"] = (
+        obtieneValorMetadata(metadata, "CUFE", "CUDE")
+        or search_result.get("cufe")
+        or search_result.get("CUFE")
+        or ""
+    )
+    detalle["qr"] = (
+        obtieneValorMetadata(metadata, "QR", "QRCODE", "QR_CODE", "CODIGO_QR", "CODIGOQR")
+        or search_result.get("qr")
+        or search_result.get("QR")
+        or search_result.get("QRCode")
+        or search_result.get("qr_code")
+        or ""
+    )
+
+    return detalle
 
 '''Funcion que realiza las validaciones y transformación de datos'''
 def transformData(req,resultado):
@@ -157,8 +295,17 @@ def transformData(req,resultado):
                     #print(f"Intento {intento+1}:", search_result)
                     if not isinstance(search_result, dict):
                         continue
-                    estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
-                    if estados:
+
+                    detalle_titanio = extraeDetalleTitanio(search_result)
+                    estado_intento = str(detalle_titanio.get("estado_dian") or "")
+                    if "Rechazado" in estado_intento:
+                        break
+                    if (
+                        "Validado" in estado_intento
+                        and detalle_titanio.get("fecha_emision")
+                        and detalle_titanio.get("cufe")
+                        and detalle_titanio.get("qr")
+                    ):
                         break
                 # Inicializar variables
                 estado_dian = None
@@ -169,15 +316,8 @@ def transformData(req,resultado):
 
                 # Validar estructura
                 if isinstance(search_result, dict):
-                    estados = search_result.get('detalleTransaccion', {}).get('estado_id', '')
-                    lista_estados = [x.strip() for x in estados.split(",") if x.strip()]
-                    if len(lista_estados) >= 4:
-                        estado_dian = lista_estados[3]
-                    metadata = search_result.get('detalleMetadata', [])
-                    metadata_dict = {
-                        item.get("campo"): item.get("valor")
-                        for item in metadata if isinstance(item, dict)
-                    }
+                    detalle_titanio = extraeDetalleTitanio(search_result)
+                    estado_dian = detalle_titanio.get("estado_dian")
                     
                     if estado_dian:
                         if "Rechazado" in estado_dian:
@@ -189,9 +329,9 @@ def transformData(req,resultado):
                             del_trans = "/PDE/public/api/PDE/borrar"
                             del_result = consumepost_trans(host_titanio, del_trans, param_del)
                         elif "Validado" in estado_dian:
-                            fecha_emision = metadata_dict.get("FECHA", "")
-                            cufe = metadata_dict.get("CUFE", "")
-                            qr = metadata_dict.get("QR", "")
+                            fecha_emision = detalle_titanio.get("fecha_emision", "")
+                            cufe = detalle_titanio.get("cufe", "")
+                            qr = detalle_titanio.get("qr", "")
                 #else:
                 #    print("⚠️ search_result no es válido:", search_result)
                 datos_transaccion = {
@@ -435,4 +575,3 @@ def switchconn(motor):
         return conectarMY(dbconnect)
     else:
         return conexion
-
