@@ -235,10 +235,14 @@ def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
         WHERE
         ENV_STATE = 'A'
         AND ENV_STATE_SEND = 'E'
-        AND TRIM(ENV_ERROR) = :error_msg
+        AND (
+            TRIM(ENV_ERROR) = :error_msg
+            OR UPPER(ENV_ERROR) LIKE :error_interno
+        )
     """
     params = {
-        "error_msg": "No se obtuvo respuesta válida de Titanio al emitir la factura."
+        "error_msg": "No se obtuvo respuesta válida de Titanio al emitir la factura.",
+        "error_interno": "%HA OCURRIDO UN ERROR INTERNO,%"
     }
     try:
         with conexion.cursor() as cursor:
