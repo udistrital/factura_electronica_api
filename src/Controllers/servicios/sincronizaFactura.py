@@ -13,6 +13,7 @@ sys.path.insert(1, p)
 from Controllers.general.function_jwt import write_token, validate_token
 from Controllers.general.function_crypto import desencriptar_variable, keyEncode
 from Controllers.general.function_consume import consumepost_bearer, consumepost, consumepost_trans
+from Controllers.general.function_mail import enviarCorreo
 #from Connect.default_pgbd import conexion ## activar para conexión por defecto
 from Scriptdb.servicios.transaccion import * 
 from Scriptdb.servicios.facturas import * 
@@ -28,6 +29,14 @@ except Exception:
 
 '''Funcion controladora del proceso ETL'''
 def sincronizeBill(req=""):
+    conexion = None
+    params = None
+    respuesta = []
+    notificacion = {
+        "exec": False,
+        "estado": "sin_ejecutar",
+        "message": "No se ejecutó la notificación"
+    }
     try:
         #token = request.headers['Authorization'].split(" ")[1]
         #user=validate_token(token,output=True)
@@ -83,13 +92,32 @@ def sincronizeBill(req=""):
                                     }
                                 })
 
-        return respuestas
+        respuesta = respuestas
     except Exception as e:
         #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
         respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
-        return respuesta
+    finally:
+        if conexion is not None:
+            try:
+                notificacion = notificaEnviosActivosConError(conexion, params)
+            except Exception as e:
+                notificacion = {
+                    "exec": False,
+                    "estado": "error",
+                    "error": str(e)
+                }
+        else:
+            notificacion = {
+                "exec": False,
+                "estado": "sin_conexion",
+                "message": "No fue posible consultar los envíos con error para notificar"
+            }
+    return {
+        "sincronizacion": respuesta,
+        "notificacion": notificacion
+    }
     #finally:
-    #    conexion.close()        
+    #    conexion.close()
 
 def corrigeEnviosConError(conexion, datos=None):
     sin_respuesta = actualizaEnviosSinRespuestaTitanio(conexion, datos)
@@ -143,6 +171,72 @@ def corrigeEnviosDocumentoDuplicado(conexion, datos=None):
         "data": respuestas,
         "total": len(respuestas)
     }
+
+def notificaEnviosActivosConError(conexion, datos=None):
+    consulta = consultaEnviosActivosConError(conexion, datos)
+    if not isinstance(consulta, dict) or consulta.get("exec") is not True:
+        return {
+            "exec": False,
+            "estado": "error_consulta" if isinstance(consulta, dict) and consulta.get("error") else "sin_notificacion",
+            "message": consulta.get("message") if isinstance(consulta, dict) else "No fue posible consultar los envíos con error",
+            "error": consulta.get("error") if isinstance(consulta, dict) else None
+        }
+
+    resumen = {}
+    for envio in consulta.get("data") or []:
+        if not isinstance(envio, dict):
+            continue
+
+        error = envio.get("ENV_ERROR")
+        if hasattr(error, "read"):
+            error = error.read()
+
+        error = str(error or "").strip() or "Sin detalle de error"
+        factura = str(
+            envio.get("FAC_DOCUMENT_ID")
+            or envio.get("FAC_SECUENCIA")
+            or envio.get("ENV_FAC_ID")
+            or "Sin número"
+        ).strip()
+        vigencia = str(envio.get("FAC_SECUENCIA_ANO") or "").strip()
+        if vigencia and not envio.get("FAC_DOCUMENT_ID"):
+            factura = f"{factura}/{vigencia}"
+
+        if error not in resumen:
+            resumen[error] = []
+        resumen[error].append(factura)
+
+    if not resumen:
+        return {
+            "exec": True,
+            "estado": "sin_notificacion",
+            "message": "No hay envíos activos con errores"
+        }
+
+    total = sum(len(facturas) for facturas in resumen.values())
+    lineas = [
+        "Notificación de envíos de facturación electrónica",
+        "",
+        f"Cantidad total de envíos activos con errores: {total}",
+        "",
+        "Detalle por error:"
+    ]
+    for error, facturas in sorted(resumen.items(), key=lambda item: len(item[1]), reverse=True):
+        lineas.append(f"- {len(facturas)}: {error}")
+        lineas.append(f"  Facturas: {', '.join(facturas)}")
+
+    lineas.extend([
+        "",
+        "Esta es una notificación automatizada del servicio de gestión de facturas."
+    ])
+
+    respuesta = enviarCorreo(
+        "Facturación electrónica - envíos activos con errores",
+        "\n".join(lineas)
+    )
+    respuesta["total_registros_error"] = total
+    respuesta["total_tipos_error"] = len(resumen)
+    return respuesta
 
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
