@@ -262,6 +262,36 @@ def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
         }
         return response
 
+def consultaEnviosActivosConError(conexion, datos=None):
+    query = """
+        SELECT
+            env.ENV_FAC_ID,
+            env.ENV_ERROR,
+            fac.FAC_DOCUMENT_ID,
+            fac.FAC_SECUENCIA,
+            fac.FAC_SECUENCIA_ANO
+        FROM MNTFE.FEENVIO env
+        INNER JOIN MNTFE.FEFACTURA fac ON env.ENV_FAC_ID = fac.FAC_ID
+        WHERE
+        env.ENV_STATE = 'A'
+        AND env.ENV_STATE_SEND = 'E'
+    """
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(query)
+            fields = [field_md[0] for field_md in cursor.description]
+            rows = cursor.fetchall()
+            registros = [dict(zip(fields, row)) for row in rows]
+        if registros:
+            return {"exec": True, "data": registros}
+        return {"exec": False, "data": [], "message": "No se encontraron registros"}
+    except Exception as e:
+        response = {
+            "exec": False,
+            "error": str(e)
+        }
+        return response
+
 def actualizaSolicitud(conexion, datos):
     query = """
         UPDATE MNTFE.FEENVIO
