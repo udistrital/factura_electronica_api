@@ -238,11 +238,13 @@ def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
         AND (
             TRIM(ENV_ERROR) = :error_msg
             OR UPPER(ENV_ERROR) LIKE :error_interno
+            OR UPPER(ENV_ERROR) LIKE :intente_mas_tarde
         )
     """
     params = {
         "error_msg": "No se obtuvo respuesta válida de Titanio al emitir la factura.",
-        "error_interno": "%HA OCURRIDO UN ERROR INTERNO,%"
+        "error_interno": "%HA OCURRIDO UN ERROR INTERNO,%",
+        "intente_mas_tarde": "%INTENTE MÁS TARDE%"
     }
     try:
         with conexion.cursor() as cursor:
@@ -304,7 +306,7 @@ def actualizaSolicitud(conexion, datos):
     params = {
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
-        "error_msg":str(datos.get("error_dian", "")),
+        "error_msg": str(datos.get("error_emision") or datos.get("error_dian", "")),
     }
     try:
         with conexion.cursor() as cursor:

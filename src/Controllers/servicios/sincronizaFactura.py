@@ -112,131 +112,15 @@ def sincronizeBill(req=""):
                 "estado": "sin_conexion",
                 "message": "No fue posible consultar los envíos con error para notificar"
             }
+        if conexion is not None:
+            try:
+                conexion.close()
+            except Exception:
+                pass
     return {
         "sincronizacion": respuesta,
         "notificacion": notificacion
     }
-    #finally:
-    #    conexion.close()
-
-def corrigeEnviosConError(conexion, datos=None):
-    sin_respuesta = actualizaEnviosSinRespuestaTitanio(conexion, datos)
-    duplicados = corrigeEnviosDocumentoDuplicado(conexion, datos)
-    duplicados_ok = (
-        isinstance(duplicados, dict)
-        and (
-            duplicados.get("exec") is True
-            or duplicados.get("message") == "No se encontraron registros"
-        )
-    )
-
-    return {
-        "exec": (
-            isinstance(sin_respuesta, dict)
-            and sin_respuesta.get("exec") is True
-            and duplicados_ok
-        ),
-        "data": {
-            "sin_respuesta_titanio": sin_respuesta,
-            "documento_duplicado": duplicados
-        }
-    }
-
-def corrigeEnviosDocumentoDuplicado(conexion, datos=None):
-    envios = consultaEnviosDocumentoDuplicado(conexion, datos)
-    if not isinstance(envios, dict) or envios.get("exec") is not True:
-        return envios
-
-    respuestas = []
-    for envio in envios.get("data") or []:
-        error = envio.get("ENV_ERROR", "")
-        if hasattr(error, "read"):
-            error = error.read()
-
-        match = re.search(r"TR_ID\s*:\s*(\d+)", str(error or ""), re.IGNORECASE)
-        if not match:
-            continue
-
-        respuesta = actualizaEnvioDocumentoDuplicado(
-            conexion,
-            {
-                "envio": envio.get("ENV_ID"),
-                "id_transaccion": match.group(1)
-            }
-        )
-        respuestas.append(respuesta)
-
-    return {
-        "exec": True,
-        "data": respuestas,
-        "total": len(respuestas)
-    }
-
-def notificaEnviosActivosConError(conexion, datos=None):
-    consulta = consultaEnviosActivosConError(conexion, datos)
-    if not isinstance(consulta, dict) or consulta.get("exec") is not True:
-        return {
-            "exec": False,
-            "estado": "error_consulta" if isinstance(consulta, dict) and consulta.get("error") else "sin_notificacion",
-            "message": consulta.get("message") if isinstance(consulta, dict) else "No fue posible consultar los envíos con error",
-            "error": consulta.get("error") if isinstance(consulta, dict) else None
-        }
-
-    resumen = {}
-    for envio in consulta.get("data") or []:
-        if not isinstance(envio, dict):
-            continue
-
-        error = envio.get("ENV_ERROR")
-        if hasattr(error, "read"):
-            error = error.read()
-
-        error = str(error or "").strip() or "Sin detalle de error"
-        factura = str(
-            envio.get("FAC_DOCUMENT_ID")
-            or envio.get("FAC_SECUENCIA")
-            or envio.get("ENV_FAC_ID")
-            or "Sin número"
-        ).strip()
-        vigencia = str(envio.get("FAC_SECUENCIA_ANO") or "").strip()
-        if vigencia and not envio.get("FAC_DOCUMENT_ID"):
-            factura = f"{factura}/{vigencia}"
-
-        if error not in resumen:
-            resumen[error] = []
-        resumen[error].append(factura)
-
-    if not resumen:
-        return {
-            "exec": True,
-            "estado": "sin_notificacion",
-            "message": "No hay envíos activos con errores"
-        }
-
-    total = sum(len(facturas) for facturas in resumen.values())
-    lineas = [
-        "Notificación de envíos de facturación electrónica",
-        "",
-        f"Cantidad total de envíos activos con errores: {total}",
-        "",
-        "Detalle por error:"
-    ]
-    for error, facturas in sorted(resumen.items(), key=lambda item: len(item[1]), reverse=True):
-        lineas.append(f"- {len(facturas)}: {error}")
-        lineas.append(f"  Facturas: {', '.join(facturas)}")
-
-    lineas.extend([
-        "",
-        "Esta es una notificación automatizada del servicio de gestión de facturas."
-    ])
-
-    respuesta = enviarCorreo(
-        "Facturación electrónica - envíos activos con errores",
-        "\n".join(lineas)
-    )
-    respuesta["total_registros_error"] = total
-    respuesta["total_tipos_error"] = len(resumen)
-    return respuesta
 
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
@@ -646,6 +530,126 @@ def loadData(resultado, conexion=""):
             },
             "code": 500
         }
+
+
+def corrigeEnviosConError(conexion, datos=None):
+    sin_respuesta = actualizaEnviosSinRespuestaTitanio(conexion, datos)
+    duplicados = corrigeEnviosDocumentoDuplicado(conexion, datos)
+    duplicados_ok = (
+        isinstance(duplicados, dict)
+        and (
+            duplicados.get("exec") is True
+            or duplicados.get("message") == "No se encontraron registros"
+        )
+    )
+
+    return {
+        "exec": (
+            isinstance(sin_respuesta, dict)
+            and sin_respuesta.get("exec") is True
+            and duplicados_ok
+        ),
+        "data": {
+            "sin_respuesta_titanio": sin_respuesta,
+            "documento_duplicado": duplicados
+        }
+    }
+
+def corrigeEnviosDocumentoDuplicado(conexion, datos=None):
+    envios = consultaEnviosDocumentoDuplicado(conexion, datos)
+    if not isinstance(envios, dict) or envios.get("exec") is not True:
+        return envios
+
+    respuestas = []
+    for envio in envios.get("data") or []:
+        error = envio.get("ENV_ERROR", "")
+        if hasattr(error, "read"):
+            error = error.read()
+
+        match = re.search(r"TR_ID\s*:\s*(\d+)", str(error or ""), re.IGNORECASE)
+        if not match:
+            continue
+
+        respuesta = actualizaEnvioDocumentoDuplicado(
+            conexion,
+            {
+                "envio": envio.get("ENV_ID"),
+                "id_transaccion": match.group(1)
+            }
+        )
+        respuestas.append(respuesta)
+
+    return {
+        "exec": True,
+        "data": respuestas,
+        "total": len(respuestas)
+    }
+
+def notificaEnviosActivosConError(conexion, datos=None):
+    consulta = consultaEnviosActivosConError(conexion, datos)
+    if not isinstance(consulta, dict) or consulta.get("exec") is not True:
+        return {
+            "exec": False,
+            "estado": "error_consulta" if isinstance(consulta, dict) and consulta.get("error") else "sin_notificacion",
+            "message": consulta.get("message") if isinstance(consulta, dict) else "No fue posible consultar los envíos con error",
+            "error": consulta.get("error") if isinstance(consulta, dict) else None
+        }
+
+    resumen = {}
+    for envio in consulta.get("data") or []:
+        if not isinstance(envio, dict):
+            continue
+
+        error = envio.get("ENV_ERROR")
+        if hasattr(error, "read"):
+            error = error.read()
+
+        error = str(error or "").strip() or "Sin detalle de error"
+        factura = str(
+            envio.get("FAC_DOCUMENT_ID")
+            or envio.get("FAC_SECUENCIA")
+            or envio.get("ENV_FAC_ID")
+            or "Sin número"
+        ).strip()
+        vigencia = str(envio.get("FAC_SECUENCIA_ANO") or "").strip()
+        if vigencia and not envio.get("FAC_DOCUMENT_ID"):
+            factura = f"{factura}/{vigencia}"
+
+        if error not in resumen:
+            resumen[error] = []
+        resumen[error].append(factura)
+
+    if not resumen:
+        return {
+            "exec": True,
+            "estado": "sin_notificacion",
+            "message": "No hay envíos activos con errores"
+        }
+
+    total = sum(len(facturas) for facturas in resumen.values())
+    lineas = [
+        "Notificación de envíos de facturación electrónica",
+        "",
+        f"Cantidad total de envíos activos con errores: {total}",
+        "",
+        "Detalle por error:"
+    ]
+    for error, facturas in sorted(resumen.items(), key=lambda item: len(item[1]), reverse=True):
+        lineas.append(f"- {len(facturas)}: {error}")
+        lineas.append(f"  Facturas: {', '.join(facturas)}")
+
+    lineas.extend([
+        "",
+        "Esta es una notificación automatizada del servicio de gestión de facturas."
+    ])
+
+    respuesta = enviarCorreo(
+        "Facturación electrónica - envíos activos con errores",
+        "\n".join(lineas)
+    )
+    respuesta["total_registros_error"] = total
+    respuesta["total_tipos_error"] = len(resumen)
+    return respuesta
 
 
 def switchconn(motor):
