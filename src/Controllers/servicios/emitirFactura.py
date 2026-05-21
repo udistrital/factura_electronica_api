@@ -1,6 +1,7 @@
 import json
 import base64
 import bcrypt
+import logging
 from flask import request, jsonify, Response
 import numpy
 import requests
@@ -20,6 +21,8 @@ from Scriptdb.servicios.facturas import *
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
 from Connect.mysqlbd import conectarMY
+
+logger = logging.getLogger(__name__)
 
 try:
     import cx_Oracle
@@ -88,15 +91,15 @@ def emitBill(req=""):
 
         return respuesta
     except Exception as e:
-        #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
+        logger.exception("EMISION: error general ejecutando el servicio de emision")
         respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
         return respuesta
     finally:
         if conexion:
             try:
                 conexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.exception("EMISION: error cerrando/devolviendo conexion Oracle al pool")
 
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
 def extractData(busqueda="",conexion=""):
@@ -107,7 +110,13 @@ def extractData(busqueda="",conexion=""):
         datos = json.loads(json_text)
         return datos
     except Exception as e:
-        #print("Ocurrió un error al rescatar datos del api de reportes: ", e) 
+        recibo = busqueda.get('parametros', {}) if isinstance(busqueda, dict) else {}
+        logger.exception(
+            "EMISION: error extrayendo datos de factura. id_factura=%s secuencia=%s vigencia=%s",
+            recibo.get("id_factura"),
+            recibo.get("secuencia"),
+            recibo.get("vigencia")
+        )
         return []  
 
 '''Funcion que realiza las validaciones y transformación de datos'''
@@ -135,6 +144,13 @@ def transformData(req,resultado):
             try:
                 acceso = consumepost(host_titanio, login_titanio, param_login)
             except requests.exceptions.Timeout:
+                recibo = req.get("parametros", {})
+                logger.warning(
+                    "EMISION: timeout autenticando con Titanio. id_factura=%s secuencia=%s vigencia=%s",
+                    recibo.get("id_factura"),
+                    recibo.get("secuencia"),
+                    recibo.get("vigencia")
+                )
                 respuesta["status"] = "error"
                 respuesta["code"] = 504
                 respuesta["resultado"]["estado"] = "error"
@@ -142,6 +158,14 @@ def transformData(req,resultado):
                 respuesta["resultado"]["datos"] = {"detalle": "El servicio de autenticación no respondió a tiempo."}
                 return respuesta
             except requests.exceptions.RequestException as e:
+                recibo = req.get("parametros", {})
+                logger.warning(
+                    "EMISION: error HTTP autenticando con Titanio. id_factura=%s secuencia=%s vigencia=%s error=%s",
+                    recibo.get("id_factura"),
+                    recibo.get("secuencia"),
+                    recibo.get("vigencia"),
+                    e
+                )
                 respuesta["status"] = "error"
                 respuesta["code"] = 502
                 respuesta["resultado"]["estado"] = "error"
@@ -302,6 +326,13 @@ def transformData(req,resultado):
                         return respuesta
 
                 except requests.exceptions.Timeout:
+                    recibo = req.get("parametros", {})
+                    logger.warning(
+                        "EMISION: timeout emitiendo/verificando factura en Titanio. id_factura=%s secuencia=%s vigencia=%s",
+                        recibo.get("id_factura"),
+                        recibo.get("secuencia"),
+                        recibo.get("vigencia")
+                    )
                     respuesta["status"] = "error"
                     respuesta["code"] = 504
                     respuesta["resultado"]["estado"] = "error"
@@ -309,6 +340,14 @@ def transformData(req,resultado):
                     respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
                     return respuesta
                 except requests.exceptions.RequestException as e:
+                    recibo = req.get("parametros", {})
+                    logger.warning(
+                        "EMISION: error HTTP emitiendo/verificando factura en Titanio. id_factura=%s secuencia=%s vigencia=%s error=%s",
+                        recibo.get("id_factura"),
+                        recibo.get("secuencia"),
+                        recibo.get("vigencia"),
+                        e
+                    )
                     respuesta["status"] = "error"
                     respuesta["code"] = 502
                     respuesta["resultado"]["estado"] = "error"
@@ -316,7 +355,13 @@ def transformData(req,resultado):
                     respuesta["resultado"]["datos"] = {"detalle": str(e)}
                     return respuesta
                 except Exception as e:
-                    #print("Ocurrió un error al emitir la factura: ", e)
+                    recibo = req.get("parametros", {})
+                    logger.exception(
+                        "EMISION: error inesperado emitiendo factura en Titanio. id_factura=%s secuencia=%s vigencia=%s",
+                        recibo.get("id_factura"),
+                        recibo.get("secuencia"),
+                        recibo.get("vigencia")
+                    )
                     respuesta['status'] = "error"
                     respuesta['code'] = 422
                     respuesta['resultado']['estado'] = "error"
@@ -332,6 +377,7 @@ def transformData(req,resultado):
             return respuesta  
 
     except requests.exceptions.Timeout:
+        logger.warning("EMISION: timeout general en transformData")
         respuesta["status"] = "error"
         respuesta["code"] = 504
         respuesta["resultado"]["estado"] = "error"
@@ -339,6 +385,7 @@ def transformData(req,resultado):
         respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
         return respuesta
     except requests.exceptions.RequestException as e:
+        logger.warning("EMISION: error HTTP general en transformData. error=%s", e)
         respuesta["status"] = "error"
         respuesta["code"] = 502
         respuesta["resultado"]["estado"] = "error"
@@ -347,7 +394,7 @@ def transformData(req,resultado):
         return respuesta
 
     except Exception as e:
-        #print("Ocurrió un error al emitir la factura: ", e)
+        logger.exception("EMISION: error inesperado general en transformData")
         respuesta['status'] = "error"
         respuesta['code'] = 422
         respuesta['resultado']['estado'] = "error"
@@ -399,6 +446,12 @@ def loadData(resultado, conexion=""):
                 if code != 404:
                     envio = registroEnvio(conexion, datos)
                     if not isinstance(envio, dict) or envio.get("exec") is not True:
+                        logger.error(
+                            "EMISION: no fue posible registrar envio con error de Titanio. id_factura=%s transaccion=%s respuesta=%s",
+                            datos.get("id_factura") if isinstance(datos, dict) else None,
+                            datos.get("id_transaccion") if isinstance(datos, dict) else None,
+                            envio
+                        )
                         trazabilidad["registro_envio"] = estado_traza_error("No registrado envío")
                         trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                         resp = {
@@ -430,6 +483,11 @@ def loadData(resultado, conexion=""):
                 return response
 
             except Exception:
+                logger.exception(
+                    "EMISION: excepcion registrando envio con error de Titanio. id_factura=%s transaccion=%s",
+                    datos.get("id_factura") if isinstance(datos, dict) else None,
+                    datos.get("id_transaccion") if isinstance(datos, dict) else None
+                )
                 trazabilidad["registro_envio"] = estado_traza_error("no registrado envío")
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
@@ -480,6 +538,11 @@ def loadData(resultado, conexion=""):
             if isinstance(envioant, dict) and envioant.get("exec") is False:
                 msg = str(envioant.get("error", "")).lower()
                 if msg and "no se encontraron" not in msg and "sin registros" not in msg and "no data found" not in msg:
+                    logger.error(
+                        "EMISION: no fue posible inactivar envio anterior. id_factura=%s respuesta=%s",
+                        datos.get("id_factura"),
+                        envioant
+                    )
                     trazabilidad["registro_envio"] = estado_traza_error("actualización previa")
                     trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
 
@@ -497,6 +560,11 @@ def loadData(resultado, conexion=""):
                     return response
 
         except Exception:
+            logger.exception(
+                "EMISION: excepcion inactivando envio anterior. id_factura=%s transaccion=%s",
+                datos.get("id_factura"),
+                datos.get("id_transaccion")
+            )
             trazabilidad["registro_envio"] = estado_traza_error("actualización previa")
             trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
             resp = {
@@ -516,6 +584,13 @@ def loadData(resultado, conexion=""):
         try:
             envio = registroEnvio(conexion, datos)
             if not isinstance(envio, dict) or envio.get("exec") is not True:
+                logger.error(
+                    "EMISION: no fue posible registrar envio. id_factura=%s transaccion=%s estado=%s respuesta=%s",
+                    datos.get("id_factura"),
+                    datos.get("id_transaccion"),
+                    datos.get("estado"),
+                    envio
+                )
                 trazabilidad["registro_envio"] = estado_traza_error("insert envío")
                 trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
                 resp = {
@@ -533,6 +608,12 @@ def loadData(resultado, conexion=""):
             trazabilidad["registro_envio"] = estado_traza_ok()
 
         except Exception:
+            logger.exception(
+                "EMISION: excepcion registrando envio. id_factura=%s transaccion=%s estado=%s",
+                datos.get("id_factura"),
+                datos.get("id_transaccion"),
+                datos.get("estado")
+            )
             trazabilidad["registro_envio"] = estado_traza_error("insert envío")
             trazabilidad["actualizacion_factura"] = estado_traza_error("no ejecutado")
             resp = {
@@ -554,6 +635,12 @@ def loadData(resultado, conexion=""):
                 try:
                     cufe_resp = registroCUFE(conexion, datos)
                     if not isinstance(cufe_resp, dict) or cufe_resp.get("exec") is not True:
+                        logger.error(
+                            "EMISION: no fue posible actualizar CUFE/QR en factura. id_factura=%s transaccion=%s respuesta=%s",
+                            datos.get("id_factura"),
+                            datos.get("id_transaccion"),
+                            cufe_resp
+                        )
                         trazabilidad["actualizacion_factura"] = estado_traza_error("update factura")
                         resp = {
                             "estado": "error",
@@ -570,6 +657,11 @@ def loadData(resultado, conexion=""):
                     trazabilidad["actualizacion_factura"] = estado_traza_ok()
 
                 except Exception:
+                    logger.exception(
+                        "EMISION: excepcion actualizando CUFE/QR en factura. id_factura=%s transaccion=%s",
+                        datos.get("id_factura"),
+                        datos.get("id_transaccion")
+                    )
                     trazabilidad["actualizacion_factura"] = estado_traza_error("update factura")
                     resp = {
                         "estado": "error",
@@ -615,6 +707,7 @@ def loadData(resultado, conexion=""):
         return response
 
     except Exception:
+        logger.exception("EMISION: error general en loadData")
         resp = {
             "estado": "error",
             "mensaje": "Ocurrió un error en el registro de la emisión de la factura.",

@@ -1,5 +1,8 @@
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 def consultaEnvio(conexion, datos):
     query = """
@@ -30,7 +33,7 @@ def consultaEnvio(conexion, datos):
         else:
             return {"exec": False, "data": [], "message": "No se encontraron registros" }
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception("BD FEENVIO: error consultando envio activo. id_factura=%s", params.get("factura"))
         response = {
             "exec": False,
             "error": str(e)
@@ -73,7 +76,12 @@ def registroEnvio(conexion, datos):
         }
         return response
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception(
+            "BD FEENVIO: error registrando envio. id_factura=%s estado=%s transaccion=%s",
+            params.get("factura"),
+            params.get("estado"),
+            params.get("id_transaccion")
+        )
         response = {
             "exec": False,
             "error": str(e)
@@ -122,7 +130,13 @@ def registroEnvioOLD(conexion, datos):
         }
         return response
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception(
+            "BD FEENVIO: error registrando envio OLD. secuencia=%s vigencia=%s estado=%s transaccion=%s",
+            params.get("secuencia"),
+            params.get("vigencia"),
+            params.get("estado"),
+            params.get("id_transaccion")
+        )
         response = {
             "exec": False,
             "error": str(e)
@@ -159,7 +173,7 @@ def consultaSolicitudes(conexion, datos):
         else:
             return {"exec": False, "data": [], "message": "No se encontraron registros" }
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception("BD FEENVIO: error consultando solicitudes pendientes de sincronizacion")
         response = {
             "exec": False,
             "error": str(e)
@@ -188,6 +202,7 @@ def consultaEnviosDocumentoDuplicado(conexion, datos=None):
             return {"exec": True, "data": registros}
         return {"exec": False, "data": [], "message": "No se encontraron registros"}
     except Exception as e:
+        logger.exception("BD FEENVIO: error consultando envios con documento duplicado")
         response = {
             "exec": False,
             "error": str(e)
@@ -221,6 +236,11 @@ def actualizaEnvioDocumentoDuplicado(conexion, datos):
         }
         return response
     except Exception as e:
+        logger.exception(
+            "BD FEENVIO: error actualizando documento duplicado. envio=%s transaccion=%s",
+            params.get("envio"),
+            params.get("id_transaccion")
+        )
         response = {
             "exec": False,
             "error": str(e)
@@ -238,11 +258,13 @@ def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
         AND (
             TRIM(ENV_ERROR) = :error_msg
             OR UPPER(ENV_ERROR) LIKE :error_interno
+            OR UPPER(ENV_ERROR) LIKE :intente_mas_tarde
         )
     """
     params = {
         "error_msg": "No se obtuvo respuesta válida de Titanio al emitir la factura.",
-        "error_interno": "%HA OCURRIDO UN ERROR INTERNO,%"
+        "error_interno": "%HA OCURRIDO UN ERROR INTERNO,%",
+        "intente_mas_tarde": "%INTENTE MÁS TARDE%"
     }
     try:
         with conexion.cursor() as cursor:
@@ -256,6 +278,7 @@ def actualizaEnviosSinRespuestaTitanio(conexion, datos=None):
         }
         return response
     except Exception as e:
+        logger.exception("BD FEENVIO: error actualizando envios sin respuesta de Titanio a estado C")
         response = {
             "exec": False,
             "error": str(e)
@@ -286,6 +309,7 @@ def consultaEnviosActivosConError(conexion, datos=None):
             return {"exec": True, "data": registros}
         return {"exec": False, "data": [], "message": "No se encontraron registros"}
     except Exception as e:
+        logger.exception("BD FEENVIO: error consultando envios activos con error para notificacion")
         response = {
             "exec": False,
             "error": str(e)
@@ -304,7 +328,7 @@ def actualizaSolicitud(conexion, datos):
     params = {
         "estado": str(datos.get("estado", "")),
         "id_transaccion": int(datos.get("id_transaccion", 0)) if datos.get("id_transaccion") not in [None, ""] else 0,
-        "error_msg":str(datos.get("error_dian", "")),
+        "error_msg": str(datos.get("error_emision") or datos.get("error_dian", "")),
     }
     try:
         with conexion.cursor() as cursor:
@@ -316,7 +340,11 @@ def actualizaSolicitud(conexion, datos):
         }
         return response
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception(
+            "BD FEENVIO: error actualizando solicitud. estado=%s transaccion=%s",
+            params.get("estado"),
+            params.get("id_transaccion")
+        )
         response = {
             "exec": False,
             "error": str(e)
@@ -344,7 +372,7 @@ def actualizaEnvio(conexion, datos):
         }
         return response
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception("BD FEENVIO: error inactivando envio anterior. id_factura=%s", params.get("transaccion"))
         response = {
             "exec": False,
             "error": str(e)
@@ -392,7 +420,11 @@ def registroCUFE(conexion, datos):
         }
         return response
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la actualización:", e)
+        logger.exception(
+            "BD FEFACTURA: error actualizando CUFE/QR. id_factura=%s fecha_emision=%s",
+            params.get("factura"),
+            params.get("emision")
+        )
         response = {
             "exec": False,
             "error": str(e)
@@ -445,7 +477,7 @@ def consultaPendientes(conexion, datos):
         else:
             return {"exec": False, "data": [], "message": "No se encontraron registros" }
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción del envio:", e)
+        logger.exception("BD FEFACTURA: error consultando facturas pendientes. items=%s", params.get("items"))
         response = {
             "exec": False,
             "error": str(e)
@@ -453,6 +485,7 @@ def consultaPendientes(conexion, datos):
         return response
 
 def consultaReporte(conexion,query,busqueda):
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(query)
@@ -464,27 +497,30 @@ def consultaReporte(conexion,query,busqueda):
         #conexion.close()
         return registros
     except Exception as e:
-        #print("Ocurrió un error al consultar los reportes: ", e)
+        logger.exception("BD REPORTES: error ejecutando consulta generica")
         return ''
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
 
 def executeReporte(conexion,query,busqueda):
+    cursor = None
     try:
-        with conexion.cursor() as cursor:
-            cursor.execute(query)
-            conexion.commit() 
-            datos_actualizados = cursor.fetchone()  # O fetchall() si esperas múltiples filas
-            registros = {}
-            if datos_actualizados:
-                fields = [field_md[0] for field_md in cursor.description]
-                for campo, dato in zip(fields, datos_actualizados):
-                    registros[campo] = dato
-            response= { "exec" : True, "data": registros}
-            return response 
+        cursor = conexion.cursor()
+        cursor.execute(query)
+        conexion.commit() 
+        datos_actualizados = cursor.fetchone()  # O fetchall() si esperas múltiples filas
+        registros = {}
+        if datos_actualizados:
+            fields = [field_md[0] for field_md in cursor.description]
+            for campo, dato in zip(fields, datos_actualizados):
+                registros[campo] = dato
+        response= { "exec" : True, "data": registros}
+        return response 
     except Exception as e:
-        #print("Ocurrió un error al ejecutar la inserción: ", e)
+        logger.exception("BD REPORTES: error ejecutando sentencia generica")
         response= { "exec" : False}
         return response  # Indicador de fallo
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
