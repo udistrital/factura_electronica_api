@@ -1,6 +1,8 @@
 import json
 import base64
 import bcrypt
+import logging
+import requests
 from flask import request, jsonify, Response
 import numpy
 import time
@@ -20,6 +22,8 @@ from Scriptdb.servicios.facturas import *
 from Connect.pgsqlbd import conectarPG
 from Connect.orasqlbd import conectarORA
 from Connect.mysqlbd import conectarMY
+
+logger = logging.getLogger(__name__)
 
 try:
     import cx_Oracle
@@ -44,8 +48,8 @@ def sincronizeBill(req=""):
         params=req.get('parametros')
         try:
             corrigeEnviosConError(conexion, params)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("SINCRONIZACION: error corrigiendo envios con estado de error antes de sincronizar")
         envio = consultaSolicitudes(conexion,params)
         exec_flag = envio.get("exec")
         # Normalizar exec
@@ -83,7 +87,12 @@ def sincronizeBill(req=""):
                    # print(f"TR_ID {tr_id} no requiere procesamiento")
 
             except Exception as e:
-                #print(f"Error procesando TR_ID {tr_id}: {e}")
+                logger.exception(
+                    "SINCRONIZACION: error procesando envio. id_factura=%s transaccion=%s estado_envio=%s",
+                    registro.get("ENV_FAC_ID") if isinstance(registro, dict) else None,
+                    registro.get("ENV_TR_ID") if isinstance(registro, dict) else None,
+                    registro.get("ENV_STATE_SEND") if isinstance(registro, dict) else None
+                )
                 respuestas.append({
                                     "estado": "error",
                                     "mensaje": "Error en procesamiento",
@@ -94,13 +103,14 @@ def sincronizeBill(req=""):
 
         respuesta = respuestas
     except Exception as e:
-        #print("Ocurrió un error en sincronizar el api de reportes: ", e)   
+        logger.exception("SINCRONIZACION: error general ejecutando el servicio")
         respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
     finally:
         if conexion is not None:
             try:
                 notificacion = notificaEnviosActivosConError(conexion, params)
             except Exception as e:
+                logger.exception("SINCRONIZACION: error generando notificacion de envios activos con error")
                 notificacion = {
                     "exec": False,
                     "estado": "error",
@@ -115,8 +125,8 @@ def sincronizeBill(req=""):
         if conexion is not None:
             try:
                 conexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.exception("SINCRONIZACION: error cerrando/devolviendo conexion Oracle al pool")
     return {
         "sincronizacion": respuesta,
         "notificacion": notificacion
@@ -127,6 +137,7 @@ def extractData(busqueda="",conexion=""):
     try:
         return [] 
     except Exception as e:
+        logger.exception("SINCRONIZACION: error extrayendo datos")
         return []  
 
 def normalizaClaveMetadata(valor):
@@ -234,6 +245,11 @@ def transformData(req,resultado):
         try:
             acceso = consumepost(host_titanio, login_titanio, param_login)
         except requests.exceptions.Timeout:
+            logger.warning(
+                "SINCRONIZACION: timeout autenticando con Titanio. id_factura=%s transaccion=%s",
+                resultado.get("id_factura"),
+                resultado.get("transaccion")
+            )
             respuesta["status"] = "error"
             respuesta["code"] = 504
             respuesta["resultado"]["estado"] = "error"
@@ -241,6 +257,12 @@ def transformData(req,resultado):
             respuesta["resultado"]["datos"] = {"detalle": "El servicio de autenticación no respondió a tiempo."}
             return respuesta
         except requests.exceptions.RequestException as e:
+            logger.warning(
+                "SINCRONIZACION: error HTTP autenticando con Titanio. id_factura=%s transaccion=%s error=%s",
+                resultado.get("id_factura"),
+                resultado.get("transaccion"),
+                e
+            )
             respuesta["status"] = "error"
             respuesta["code"] = 502
             respuesta["resultado"]["estado"] = "error"
@@ -334,6 +356,11 @@ def transformData(req,resultado):
                 return respuesta
             
             except requests.exceptions.Timeout:
+                logger.warning(
+                    "SINCRONIZACION: timeout verificando factura en Titanio. id_factura=%s transaccion=%s",
+                    resultado.get("id_factura"),
+                    resultado.get("transaccion")
+                )
                 respuesta["status"] = "error"
                 respuesta["code"] = 504
                 respuesta["resultado"]["estado"] = "error"
@@ -341,6 +368,12 @@ def transformData(req,resultado):
                 respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
                 return respuesta
             except requests.exceptions.RequestException as e:
+                logger.warning(
+                    "SINCRONIZACION: error HTTP verificando factura en Titanio. id_factura=%s transaccion=%s error=%s",
+                    resultado.get("id_factura"),
+                    resultado.get("transaccion"),
+                    e
+                )
                 respuesta["status"] = "error"
                 respuesta["code"] = 502
                 respuesta["resultado"]["estado"] = "error"
@@ -348,7 +381,11 @@ def transformData(req,resultado):
                 respuesta["resultado"]["datos"] = {"detalle": str(e)}
                 return respuesta
             except Exception as e:
-                #print("Ocurrió un error al emitir la factura: ", e)
+                logger.exception(
+                    "SINCRONIZACION: error inesperado verificando factura en Titanio. id_factura=%s transaccion=%s",
+                    resultado.get("id_factura"),
+                    resultado.get("transaccion")
+                )
                 respuesta['status'] = "error"
                 respuesta['code'] = 422
                 respuesta['resultado']['estado'] = "error"
@@ -356,6 +393,7 @@ def transformData(req,resultado):
                 return respuesta         
 
     except requests.exceptions.Timeout:
+        logger.warning("SINCRONIZACION: timeout general en transformData")
         respuesta["status"] = "error"
         respuesta["code"] = 504
         respuesta["resultado"]["estado"] = "error"
@@ -363,6 +401,7 @@ def transformData(req,resultado):
         respuesta["resultado"]["datos"] = {"detalle": "El servicio de emisión no respondió en el tiempo configurado."}
         return respuesta
     except requests.exceptions.RequestException as e:
+        logger.warning("SINCRONIZACION: error HTTP general en transformData. error=%s", e)
         respuesta["status"] = "error"
         respuesta["code"] = 502
         respuesta["resultado"]["estado"] = "error"
@@ -371,7 +410,7 @@ def transformData(req,resultado):
         return respuesta
 
     except Exception as e:
-        #print("Ocurrió un error al emitir la factura: ", e)
+        logger.exception("SINCRONIZACION: error inesperado general en transformData")
         respuesta['status'] = "error"
         respuesta['code'] = 422
         respuesta['resultado']['estado'] = "error"
@@ -452,6 +491,12 @@ def loadData(resultado, conexion=""):
         try:
             envio = actualizaSolicitud(conexion, datos)
             if not isinstance(envio, dict) or not envio:
+                logger.error(
+                    "SINCRONIZACION: respuesta invalida actualizando envio. id_factura=%s transaccion=%s respuesta_tipo=%s",
+                    datos.get("id_factura"),
+                    datos.get("id_transaccion"),
+                    type(envio).__name__
+                )
                 trazabilidad["registro_envio"] = err("insert")
                 return {
                     "estado": "error",
@@ -463,6 +508,12 @@ def loadData(resultado, conexion=""):
             trazabilidad["registro_envio"] = ok()
 
         except Exception as e:
+            logger.exception(
+                "SINCRONIZACION: excepcion actualizando envio. id_factura=%s transaccion=%s estado=%s",
+                datos.get("id_factura"),
+                datos.get("id_transaccion"),
+                datos.get("estado")
+            )
             trazabilidad["registro_envio"] = err("insert")
             return {
                 "estado": "error",
@@ -479,6 +530,12 @@ def loadData(resultado, conexion=""):
                 try:
                     resp_cufe = registroCUFE(conexion, datos)
                     if not isinstance(resp_cufe, dict) or resp_cufe.get("exec") is not True:
+                        logger.error(
+                            "SINCRONIZACION: error actualizando CUFE/QR en factura. id_factura=%s transaccion=%s respuesta=%s",
+                            datos.get("id_factura"),
+                            datos.get("id_transaccion"),
+                            resp_cufe
+                        )
                         trazabilidad["actualizacion_factura"] = err("update")
                         return {
                             "estado": "error",
@@ -490,6 +547,11 @@ def loadData(resultado, conexion=""):
                     trazabilidad["actualizacion_factura"] = ok()
 
                 except Exception:
+                    logger.exception(
+                        "SINCRONIZACION: excepcion actualizando CUFE/QR en factura. id_factura=%s transaccion=%s",
+                        datos.get("id_factura"),
+                        datos.get("id_transaccion")
+                    )
                     trazabilidad["actualizacion_factura"] = err("update")
                     return {
                         "estado": "error",
@@ -520,6 +582,7 @@ def loadData(resultado, conexion=""):
         }
 
     except Exception as e:
+        logger.exception("SINCRONIZACION: error general en loadData")
         return {
             "estado": "error",
             "mensaje": "Error general en procesamiento",

@@ -7,9 +7,12 @@ Fecha: Enero 2024
 versión: 0.0.0.1
 """
 import os
+import logging
 from dotenv import load_dotenv
 load_dotenv()
 import cx_Oracle
+
+logger = logging.getLogger(__name__)
 
 _pool = None
 
@@ -38,5 +41,10 @@ def conectarORA(dbconnect):
             _pool = crearPoolORA(dbconnect)
         return _pool.acquire()
     except Exception as e:
-        print("Error al conectar a ORACLE Server: ", e)
+        logger.exception(
+            "BD ORACLE: error creando/adquiriendo conexion del pool. host=%s port=%s service=%s",
+            dbconnect.get("host"),
+            dbconnect.get("port"),
+            dbconnect.get("database")
+        )
         return None
