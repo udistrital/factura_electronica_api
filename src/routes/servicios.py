@@ -10,6 +10,7 @@ p = os.path.abspath('src')
 sys.path.insert(1, p)
 from Controllers.general.function_jwt import validate_token
 from Controllers.servicios.emitirFactura import emitBill
+from Controllers.servicios.previsualizarFactura import previewBill
 from Controllers.servicios.emitirNotaCredito import emitCredNote
 from Controllers.servicios.emitirNotaDebito import emitDebitNote
 from Controllers.servicios.sincronizaFactura import sincronizeBill
@@ -26,6 +27,12 @@ def verify_token_middleware():
 def bill_service():
     data = request.get_json()
     respuesta = emitBill(data)
+    return respuesta
+
+@servicio.route("/serv/emit/preview", methods=["POST"])
+def bill_preview_service():
+    data = request.get_json()
+    respuesta = previewBill(data)
     return respuesta
 
 @servicio.route("/serv/creditnote", methods=["POST"])
@@ -51,4 +58,3 @@ def exec_service():
     data = request.get_json()
     respuesta = executeBill(data)
     return respuesta
-
