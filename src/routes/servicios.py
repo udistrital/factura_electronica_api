@@ -13,7 +13,7 @@ from Controllers.servicios.emitirFactura import emitBill
 from Controllers.servicios.previsualizarFactura import previewBill
 from Controllers.servicios.emitirNotaCredito import emitCredNote
 from Controllers.servicios.emitirNotaDebito import emitDebitNote
-from Controllers.servicios.sincronizaFactura import sincronizeBill
+from Controllers.servicios.sincronizaFactura import getSincronizeJobStatus, sincronizeBill, sincronizeBillAsync
 from Controllers.servicios.ejecutarFactura import executeBill
 
 servicio = Blueprint("serv", __name__)
@@ -49,9 +49,21 @@ def debit_service():
 
 @servicio.route("/serv/sinc", methods=["POST"])
 def sinc_service():
-    data = request.get_json()
-    respuesta = sincronizeBill(data)
-    return respuesta
+    data = request.get_json() or {}
+    respuesta = sincronizeBillAsync(data)
+    return jsonify(respuesta), 202
+
+@servicio.route("/serv/sinc/async", methods=["POST"])
+def sinc_async_service():
+    data = request.get_json() or {}
+    respuesta = sincronizeBillAsync(data)
+    return jsonify(respuesta), 202
+
+@servicio.route("/serv/sinc/status", methods=["POST"])
+def sinc_status_service():
+    data = request.get_json() or {}
+    respuesta, status_code = getSincronizeJobStatus(data)
+    return jsonify(respuesta), status_code
 
 @servicio.route("/serv/exec", methods=["POST"])
 def exec_service():
