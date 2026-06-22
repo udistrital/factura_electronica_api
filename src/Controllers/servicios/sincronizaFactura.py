@@ -3,6 +3,8 @@ import base64
 import bcrypt
 import logging
 import requests
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from flask import request, jsonify, Response
 import numpy
 import time
@@ -24,6 +26,10 @@ from Connect.orasqlbd import conectarORA
 from Connect.mysqlbd import conectarMY
 
 logger = logging.getLogger(__name__)
+SINC_BACKGROUND_WORKERS = max(1, int(os.getenv("SINC_BACKGROUND_WORKERS", "1")))
+_sinc_executor = ThreadPoolExecutor(max_workers=SINC_BACKGROUND_WORKERS)
+_sinc_jobs = {}
+_sinc_jobs_lock = threading.Lock()
 
 try:
     import cx_Oracle
@@ -31,11 +37,153 @@ try:
 except Exception:
     LOB_TYPES = tuple()
 
+def _job_timestamp():
+    return datetime.now().isoformat(timespec="seconds")
+
+def _update_sinc_job(job_id, **changes):
+    with _sinc_jobs_lock:
+        job = _sinc_jobs.get(job_id, {})
+        job.update(changes)
+        job["updated_at"] = _job_timestamp()
+        _sinc_jobs[job_id] = job
+        return job.copy()
+
+def _count_pending_sinc_records(req):
+    conexion = None
+    params = req.get("parametros") if isinstance(req, dict) else None
+    try:
+        conexion = switchconn('oracle')
+        envio = consultaSolicitudes(conexion, params)
+        if not isinstance(envio, dict):
+            return None, "La consulta de pendientes no retornó una estructura válida."
+        if envio.get("exec") is not True and envio.get("message"):
+            return 0, None
+        if envio.get("exec") is not True:
+            return None, envio.get("error") or "No fue posible consultar los pendientes de sincronización."
+        return len(envio.get("data") or []), None
+    except Exception as e:
+        logger.exception("SINCRONIZACION ASYNC: error calculando cantidad de registros pendientes")
+        return None, str(e)
+    finally:
+        if conexion:
+            try:
+                conexion.close()
+            except Exception:
+                logger.exception("SINCRONIZACION ASYNC: error cerrando conexion al calcular pendientes")
+
+def _run_sinc_job(job_id, req):
+    _update_sinc_job(job_id, estado="running", started_at=_job_timestamp())
+    logger.info("SINCRONIZACION ASYNC: inicio job_id=%s", job_id)
+    try:
+        resultado = sincronizeBill(req, job_id=job_id)
+        _update_sinc_job(
+            job_id,
+            estado="completed",
+            finished_at=_job_timestamp(),
+            resultado=resultado
+        )
+        logger.info("SINCRONIZACION ASYNC: fin job_id=%s estado=completed", job_id)
+    except Exception as e:
+        logger.exception("SINCRONIZACION ASYNC: error job_id=%s", job_id)
+        _update_sinc_job(
+            job_id,
+            estado="error",
+            finished_at=_job_timestamp(),
+            error=str(e)
+        )
+
+def sincronizeBillAsync(req=""):
+    job_id = str(uuid.uuid4())
+    payload = req if isinstance(req, dict) else {}
+    total_pendientes, error_conteo = _count_pending_sinc_records(payload)
+
+    with _sinc_jobs_lock:
+        _sinc_jobs[job_id] = {
+            "job_id": job_id,
+            "estado": "queued",
+            "registros_a_procesar": total_pendientes,
+            "error_conteo": error_conteo,
+            "avance": {
+                "total": total_pendientes,
+                "procesados": 0,
+                "correctos": 0,
+                "errados": 0,
+                "porcentaje": 100 if total_pendientes == 0 else 0
+            },
+            "resumen": {
+                "total": total_pendientes,
+                "procesados": 0,
+                "correctos": 0,
+                "errados": 0
+            },
+            "created_at": _job_timestamp(),
+            "updated_at": _job_timestamp()
+        }
+
+    _sinc_executor.submit(_run_sinc_job, job_id, payload)
+    logger.info(
+        "SINCRONIZACION ASYNC: job encolado job_id=%s registros_a_procesar=%s error_conteo=%s",
+        job_id,
+        total_pendientes,
+        error_conteo
+    )
+    return {
+        "estado": "accepted",
+        "mensaje": "Sincronización encolada para ejecución en segundo plano.",
+        "job_id": job_id,
+        "registros_a_procesar": total_pendientes,
+        "error_conteo": error_conteo
+    }
+
+def getSincronizeJob(job_id):
+    with _sinc_jobs_lock:
+        job = _sinc_jobs.get(job_id)
+        if not job:
+            return {
+                "estado": "error",
+                "mensaje": "No se encontró el job de sincronización.",
+                "job_id": job_id
+            }, 404
+        return job.copy(), 200
+
+def getSincronizeJobStatus(req=""):
+    payload = req if isinstance(req, dict) else {}
+    job_id = payload.get("job_id")
+
+    if job_id:
+        return getSincronizeJob(job_id)
+
+    with _sinc_jobs_lock:
+        jobs_en_ejecucion = [
+            job.copy()
+            for job in _sinc_jobs.values()
+            if job.get("estado") in ["queued", "running"]
+        ]
+
+    if not jobs_en_ejecucion:
+        return {
+            "estado": "error",
+            "mensaje": "No existen procesos de sincronización en ejecución.",
+            "total": 0,
+            "procesos": []
+        }, 404
+
+    return {
+        "estado": "success",
+        "mensaje": "Procesos de sincronización en ejecución.",
+        "total": len(jobs_en_ejecucion),
+        "procesos": jobs_en_ejecucion
+    }, 200
+
 '''Funcion controladora del proceso ETL'''
-def sincronizeBill(req=""):
+def sincronizeBill(req="", job_id=None):
     conexion = None
     params = None
     respuesta = []
+    total_registros = 0
+    procesados = 0
+    correctos = 0
+    errados = 0
     notificacion = {
         "exec": False,
         "estado": "sin_ejecutar",
@@ -59,6 +207,24 @@ def sincronizeBill(req=""):
             exec_flag = bool(exec_flag)
 
         data = envio.get("data") or []
+        total_registros = len(data)
+        if job_id:
+            _update_sinc_job(
+                job_id,
+                registros_a_procesar=total_registros,
+                avance={
+                    "total": total_registros,
+                    "procesados": 0,
+                    "correctos": 0,
+                    "errados": 0,
+                    "porcentaje": 0 if total_registros else 100
+                },
+                resumen={
+                    "total": total_registros,
+                    "correctos": 0,
+                    "errados": 0
+                }
+            )
         respuestas = []
         for registro in data:
             try:
@@ -83,6 +249,11 @@ def sincronizeBill(req=""):
                     response = loadData(resultado, conexion)
                     #print(response)
                     respuestas.append(response)
+                    procesados += 1
+                    if isinstance(response, dict) and response.get("estado") == "success":
+                        correctos += 1
+                    else:
+                        errados += 1
                 #else:
                    # print(f"TR_ID {tr_id} no requiere procesamiento")
 
@@ -100,8 +271,52 @@ def sincronizeBill(req=""):
                                         "detalle": str(e)
                                     }
                                 })
+                procesados += 1
+                errados += 1
+            finally:
+                if job_id and isinstance(registro, dict):
+                    porcentaje = round((procesados / total_registros) * 100, 2) if total_registros else 100
+                    _update_sinc_job(
+                        job_id,
+                        avance={
+                            "total": total_registros,
+                            "procesados": procesados,
+                            "correctos": correctos,
+                            "errados": errados,
+                            "porcentaje": porcentaje
+                        },
+                        resumen={
+                            "total": total_registros,
+                            "correctos": correctos,
+                            "errados": errados
+                        },
+                        ultimo_registro={
+                            "id_factura": registro.get("ENV_FAC_ID"),
+                            "secuencia": registro.get("FAC_SECUENCIA"),
+                            "vigencia": registro.get("FAC_SECUENCIA_ANO"),
+                            "transaccion": registro.get("ENV_TR_ID"),
+                            "estado_envio": registro.get("ENV_STATE_SEND")
+                        }
+                    )
 
         respuesta = respuestas
+        if job_id:
+            _update_sinc_job(
+                job_id,
+                avance={
+                    "total": total_registros,
+                    "procesados": procesados,
+                    "correctos": correctos,
+                    "errados": errados,
+                    "porcentaje": 100 if total_registros == 0 else round((procesados / total_registros) * 100, 2)
+                },
+                resumen={
+                    "total": total_registros,
+                    "procesados": procesados,
+                    "correctos": correctos,
+                    "errados": errados
+                }
+            )
     except Exception as e:
         logger.exception("SINCRONIZACION: error general ejecutando el servicio")
         respuesta = {"Error":f"No fue posible procesar la emisión de la factura a Titanio, {e}"}
@@ -129,7 +344,13 @@ def sincronizeBill(req=""):
                 logger.exception("SINCRONIZACION: error cerrando/devolviendo conexion Oracle al pool")
     return {
         "sincronizacion": respuesta,
-        "notificacion": notificacion
+        "notificacion": notificacion,
+        "resumen": {
+            "total": total_registros,
+            "procesados": procesados,
+            "correctos": correctos,
+            "errados": errados
+        }
     }
 
 '''Funcion que realiza las consulta de los datos de las fuentes de datos'''
@@ -176,6 +397,21 @@ def obtieneValorMetadata(metadata, *claves):
 
     return ""
 
+def obtieneEstadoDian(estados):
+    lista_estados = [x.strip() for x in str(estados or "").split(",") if x.strip()]
+    if not lista_estados:
+        return None
+
+    for estado in reversed(lista_estados):
+        if "Rechazado" in estado:
+            return estado
+
+    for estado in reversed(lista_estados):
+        if "Validado" in estado and "Transacción Validada" not in estado:
+            return estado
+
+    return lista_estados[-1]
+
 def extraeDetalleTitanio(search_result):
     detalle = {
         "estado_dian": None,
@@ -193,9 +429,7 @@ def extraeDetalleTitanio(search_result):
         estados = detalle_transaccion.get('estado_id', '')
     if not estados:
         estados = search_result.get("estado_id", "")
-    lista_estados = [x.strip() for x in str(estados).split(",") if x.strip()]
-    if len(lista_estados) >= 4:
-        detalle["estado_dian"] = lista_estados[3]
+    detalle["estado_dian"] = obtieneEstadoDian(estados)
 
     metadata = search_result.get('detalleMetadata', [])
     detalle["fecha_emision"] = (
